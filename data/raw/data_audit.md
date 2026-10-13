@@ -1,0 +1,140 @@
+# Data audit
+
+What the frozen snapshot contains and which source behaviours affect cleaning. Figures come
+from `call_volumes_2026-09-13.parquet`, on local time after the repair in `src/clean.py`,
+unless stated.
+
+Service:
+`https://services2.arcgis.com/11XBiaBYA9Ep0yNJ/arcgis/rest/services/311_Call_Volumes/FeatureServer/0`
+
+Fields: `CALL_DATE`, `MILITARY_HOUR`, `INTERVAL`, `OFFERED`, `HANDLED`, `ABANDONED`,
+`PROCESSED_IN_IVR`, `TOTAL_TALK_TIME`, `AVERAGE_TALK_TIME`, `ObjectId`.
+
+148,269 rows, 2017-01-01 to 2026-09-11 local. 4,057,797 calls offered as published,
+3,776,255 after the duplicate repair.
+
+## Grain and absent intervals
+
+`MILITARY_HOUR` and `INTERVAL` agree on every row, so the grain is 30 minutes across a
+48-slot day. `CALL_DATE` is midnight US Pacific in epoch milliseconds.
+
+Intervals with no calls are usually not written. Absence tracks quiet hours, and the
+publisher also writes 477 explicit zero rows, so absent intervals are read as zero. Inside
+opening hours in the test window, 0.01% of intervals are absent. 2019-05-26 is an outage.
+
+## Time-base break, 2024-07-17
+
+From the row labelled 2024-07-17 00:00, every label is a fixed UTC+4 timestamp: 7 hours
+ahead of Halifax in summer and 8 in winter. The date moves with the hour. Post-break rows
+labelled 00:00–02:30 carry Friday-evening volume on Saturdays and almost none on Sundays
+and Mondays.
+
+Read as UTC+4 and converted to `America/Halifax`, the weekday profile matches the
+pre-2023 profile at correlation 0.9997, against 0.96–0.97 at ±30 minutes. A per-row hour
+shift that keeps the date does not fit.
+
+HRM documents the migration from Telus Elements to an Enghouse-hosted cloud service (CAO
+contract amendment, 2024-04-05) and the Enghouse Cloud launch in July 2024. HRM has
+published nothing about the timestamp defect, so its cause is an inference.
+
+## Duplicate counts, 2023-05-23 → 2024-07-16
+
+On 395 of the 407 days with calls in this period, the table counts every handled and
+abandoned call twice. Talk time is doubled with them, and `OFFERED` includes the second
+copy. `PROCESSED_IN_IVR` is not doubled.
+
+HRM's 311 Call Details service holds one row per call:
+`https://services2.arcgis.com/11XBiaBYA9Ep0yNJ/arcgis/rest/services/311_Call_Details/FeatureServer/0`
+
+- Inside the period, Call Details itself repeats each call: handled calls about four times
+  and abandoned calls twice, with the same ID, times and wrap-up code.
+- On a doubled day, every count in this table is even apart from a stray interval. The
+  12 days counted once have about half their counts odd. No day outside the period is
+  doubled. 2023-05-23 is the first open day after a closure; 2024-07-16 is the last day
+  before the Enghouse cutover.
+
+`src/clean.py` uses that parity rule: inside the period, a day is halved when under a fifth
+of its non-zero handled and abandoned counts are odd. It halves handled, abandoned and talk
+time, and removes the second copy from `OFFERED`. This takes out 281,543 agent calls. A
+stray odd interval on a doubled day becomes a half call. The snapshot is not changed.
+
+`src/duplicates.py` checks the rule day by day against distinct `CALL_ID`s in Call Details,
+from a week before the period to a week after it, and writes the daily counts to
+`results/duplicate_check.csv`:
+
+| Days | Published / distinct IDs | Repaired / distinct IDs |
+|---|---:|---:|
+| 395 halved, inside the period | 2.000–2.026 | 1.000–1.013 |
+| 12 not halved, inside the period | 1.000 | 1.000 |
+| 6 open days before the period | 1.000 | 1.000 |
+
+The rule and Call Details agree on every day. In the week after the period, totals agree
+within 4%. Single days there differ by up to 18%, probably because the two services place
+the post-cutover time base differently.
+
+| Period | Dates | Weekday agent demand | IVR share | Abandoned / agent demand |
+|---|---|---:|---:|---:|
+| Telus, before | → 2023-05-22 | 828 | 25–34% | 8.3% |
+| Telus, repaired | 2023-05-23 → 2024-07-16 | 885 | 26–41% | 7.4% |
+| Enghouse | 2024-07-17 → | 899 | 24–37% | 4.8% |
+
+Weekday means per day, holidays excluded, over 2022-05 → 2023-04, 2023-06-12 → 2024-07-16
+and 2024-07-22 → 2025-07-21. IVR share is the monthly range.
+
+After the repair the level is continuous. Abandonment still falls at the 2024-07-17
+platform change, which may be a change in how abandons are counted.
+
+HRM publishes 374,000 calls for FY2023/24. After the repair, `OFFERED` for that year is
+390,698, within 5%; FY2022/23 agrees within 3%.
+
+## Opening hours
+
+Agent demand follows HRM's published 311 hours to the half-hour: weekdays 08:00–20:00,
+weekends 09:00–17:30. Until 2017-07-03 the line was staffed 07:00–23:00. Weekend closing
+was later in 2018–2020 and has been 17:30 since 2021.
+
+From 2023-05-22 the line takes no agent calls on statutory holidays. Before that, only
+25 December and 1 January were closed (from 2020-12-25), and other holidays were open with
+low volume. Practice is not consistent: Easter Monday was closed in 2026 and open in 2024
+and 2025. `data/special_days.csv` lists each closed day.
+
+## The line runs 24 hours; agents do not
+
+`OFFERED` counts every call to the line and runs 47–49% above `HANDLED + ABANDONED` in
+training and test. The second counts the calls that reached or queued for an agent. The staffing model needs the second.
+
+The three outcome fields are not a decomposition of `OFFERED`. On 10,419 rows
+`HANDLED + ABANDONED + PROCESSED_IN_IVR` exceeds `OFFERED`, so a call can pass the IVR and
+still reach an agent. A further 146,004 calls, 3.9% of offered, fall into none of the three.
+`OFFERED − PROCESSED_IN_IVR` is not a safe route to agent demand.
+
+## Talk time and abandonment
+
+Mean talk time is `TOTAL_TALK_TIME` summed over `HANDLED` summed. It drifts: 182 s in 2017,
+288 s in 2023, 237 s in primary training (2024-07-17 → 2025-08-31) and 248 s in the test
+window. Averaging the `AVERAGE_TALK_TIME` column gives a lower figure, because the column is
+0 on the 55,247 rows where `HANDLED` is 0.
+
+This is talk time, not handle time. HRM publishes no field dictionary saying whether hold
+and after-call work are included, so talk time is a lower bound on service time.
+
+Abandonment is 4.9% of agent demand in primary training and 5.8% in the test window. It is
+produced jointly by patience and congestion, and the table has no waiting times or staffing
+levels, so patience cannot be identified from it.
+
+## Named days
+
+Hurricane Dorian (2019-09-07/08), Hurricane Fiona (2022-09-24/25), the Tantallon wildfire
+(2023-05-29/30, 2,579 agent calls on the first day), the July 2023 flood (2023-07-22), the
+February 2024 snowstorms (2024-02-03/04 and 2024-02-14), and Canada Day evenings in
+2017–2019, when calls offered spike after 21:00. No 2020 shock shows in agent demand.
+
+## Open
+
+What `OFFERED` counts under HRM's configuration. Vendor conventions differ: Genesys
+documents flow-outs that break offered = answered + abandoned, Cisco can exclude short
+abandons, Avaya treats offered as the denominator for both outcomes.
+
+What the 3.9% residual between `OFFERED` and the three outcome fields represents.
+
+Why Telus wrote duplicate counts, and why 12 days escaped them.

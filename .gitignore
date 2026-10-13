@@ -1,0 +1,22 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ipynb_checkpoints/
+.DS_Store
+spec
+PROJECT_PLAN.md
+DECISIONS.md
+
+# Pulled data is reproducible from the recorded extraction details, so it is
+# not committed. The folders are kept via .gitkeep.
+data/raw/*
+data/processed/*
+results/*
+!data/raw/.gitkeep
+!data/raw/data_audit.md
+!data/processed/.gitkeep
+!results/.gitkeep
+!results/staffing_probe.md
+!results/baselines.md
+!results/duplicate_check.csv
