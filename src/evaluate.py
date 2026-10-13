@@ -11,7 +11,14 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from src.baselines import WEEK, Forecaster, MSTLModel, ProphetModel, SeasonalNaive
+from src.baselines import (
+    WEEK,
+    Forecaster,
+    MSTLModel,
+    ProphetModel,
+    SeasonalNaive,
+    XGBoostModel,
+)
 from src.clean import WINDOWS, window
 
 LEAD = pd.Timedelta(days=7)
@@ -129,6 +136,8 @@ RUNS = [
     (MSTLModel(), "secondary"),
     (ProphetModel(yearly=False), "primary"),
     (ProphetModel(yearly=True), "secondary"),
+    (XGBoostModel(), "primary"),
+    (XGBoostModel(), "secondary"),
 ]
 
 

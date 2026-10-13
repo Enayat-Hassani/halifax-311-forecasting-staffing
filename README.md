@@ -10,8 +10,9 @@ This project tests forecasts of contact-centre demand by the staffing decision t
 | Staffing sensitivity probe | Done. Forecast error moves the staffing requirement (see below) |
 | Cleaning and train/test split | Done. `src/clean.py`, `notebooks/01_eda.ipynb` |
 | Baselines and evaluation harness | Done. `src/evaluate.py`, `results/baselines.md` |
-| XGBoost | Next |
-| Chronos-2, decision layer, report | Planned |
+| XGBoost | Done. Same backtest, `src/baselines.py` |
+| Chronos-2 | Next |
+| Decision layer, report | Planned |
 
 ## The data
 
@@ -42,9 +43,11 @@ Each Monday at 00:00, every model forecasts the Monday–Sunday week that starts
 
 Closed days and the 2019 outage are replaced in the history by the last open day of the same weekday before any model sees them. Without this, holiday zeros pull down the Monday profile. Targets are not changed. Model settings are fixed in advance, and none is tuned on the test window.
 
-## Baselines
+## Results so far
 
-Over 52 weeks of open intervals, Seasonal Naive has a WAPE of 26.1%. MSTL has 21.8% on either window. Prophet has 23.5% on primary training and 21.3% on secondary, where it can learn the yearly cycle. Long history does not change MSTL, because its forecast follows the latest seasonal cycles. On the first open weekday after a closure, every model under-forecasts by 5–9%. [results/baselines.md](results/baselines.md) has the peak, off-peak and post-closure tables.
+Over 52 weeks of open intervals, Seasonal Naive has a WAPE of 26.1%. MSTL has 21.8% on either window. Prophet has 23.5% on primary training and 21.3% on secondary, where it can learn the yearly cycle. Long history does not change MSTL, because its forecast follows the latest seasonal cycles. On the first open weekday after a closure, these three under-forecast by 5–9%.
+
+XGBoost forecasts every slot directly from the calendar and from the same slot 2–5 weeks and 52 weeks earlier. No lag is shorter than the 14 days between the origin and the end of the target week. It has a WAPE of 19.8% on primary training and 19.3% on secondary, and it is the most accurate model at peak, off-peak and after closures. [results/baselines.md](results/baselines.md) has the peak, off-peak and post-closure tables.
 
 ## Staffing probe
 
@@ -91,7 +94,7 @@ src/clean.py           time-base and duplicate repair, regular series, windows
 src/duplicates.py      day-by-day check of the duplicate repair
 src/erlang.py          Erlang B, C and A; required agents
 src/probe.py           staffing sensitivity probe
-src/baselines.py       Seasonal Naive, MSTL, Prophet
+src/baselines.py       Seasonal Naive, MSTL, Prophet, XGBoost
 src/evaluate.py        weekly backtest and metrics
 data/special_days.csv  closed days, named events, source transitions
 notebooks/01_eda.ipynb seasonality and source breaks

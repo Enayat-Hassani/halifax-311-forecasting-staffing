@@ -11,6 +11,7 @@ dependencies = [
     "matplotlib>=3.11.2",
     "statsforecast>=2.1,<2.2",
     "prophet>=1.1",
+    "xgboost>=3,<4",
 ]
 
 [dependency-groups]
