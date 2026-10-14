@@ -78,6 +78,8 @@ def test_backtest_sees_only_history_before_each_origin(train_window, start):
     assert len(got) == 52 * WEEK
     assert (got.groupby("origin").size() == WEEK).all()
     assert (got["ts"] - got["origin"] >= pd.Timedelta(days=7)).all()
+    assert (got["seconds"] >= 0).all()
+    assert (got.groupby("origin")["seconds"].nunique() == 1).all()
     assert (got["forecast"] == 0).all()  # negatives clipped
     # Actuals come from the uncleansed series: the closed day stays zero.
     assert (got.loc[got["ts"].dt.normalize() == "2025-12-25", "actual"] == 0).all()

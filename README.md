@@ -11,7 +11,7 @@ This project tests forecasts of contact-centre demand by the staffing decision t
 | Cleaning and train/test split | Done. `src/clean.py`, `notebooks/01_eda.ipynb` |
 | Baselines and evaluation harness | Done. `src/evaluate.py`, `results/baselines.md` |
 | XGBoost | Done. Same backtest, `src/baselines.py` |
-| Chronos-2 | Next |
+| Chronos-2 | Done. Zero-shot, same backtest |
 | Decision layer, report | Planned |
 
 ## The data
@@ -47,7 +47,9 @@ Closed days and the 2019 outage are replaced in the history by the last open day
 
 Over 52 weeks of open intervals, Seasonal Naive has a WAPE of 26.1%. MSTL has 21.8% on either window. Prophet has 23.5% on primary training and 21.3% on secondary, where it can learn the yearly cycle. Long history does not change MSTL, because its forecast follows the latest seasonal cycles. On the first open weekday after a closure, these three under-forecast by 5–9%.
 
-XGBoost forecasts every slot directly from the calendar and from the same slot 2–5 weeks and 52 weeks earlier. No lag is shorter than the 14 days between the origin and the end of the target week. It has a WAPE of 19.8% on primary training and 19.3% on secondary, and it is the most accurate model at peak, off-peak and after closures. [results/baselines.md](results/baselines.md) has the peak, off-peak and post-closure tables.
+XGBoost forecasts every slot directly from the calendar and from the same slot 2–5 weeks and 52 weeks earlier. No lag is shorter than the 14 days between the origin and the end of the target week. It has a WAPE of 19.8% on primary training and 19.3% on secondary, and it is the most accurate model at peak, off-peak and after closures. Chronos-2 forecasts zero-shot from the last 24 weeks, its maximum context, with no training on this data. It has a WAPE of 21.5%, close to MSTL and behind XGBoost, and it under-forecasts by 4.4%. Like MSTL, it follows the recent level and misses the seasonal turns: it over-forecasts November by 23% and under-forecasts January by 21%. It has no calendar input, so after a closure it under-forecasts by 12%. The model was released in October 2025, inside the test window, and Halifax 311 is not in its published training data. A warm forecast takes 0.3 s, against 1–2.5 s for XGBoost and 15–90 s for MSTL and Prophet.
+
+[results/baselines.md](results/baselines.md) has the peak, off-peak, post-closure and run-cost tables.
 
 ## Staffing probe
 
@@ -80,8 +82,8 @@ uv run python -m src.ingest   # pull a dated snapshot into data/raw/
 uv run python -m src.clean    # write data/processed/series.parquet
 uv run python -m src.duplicates # check the duplicate repair against per-call records
 uv run python -m src.probe    # write results/staffing_probe.md
-uv run python -m src.evaluate # backtest the baselines, about 1.5 hours
-uv run pytest
+uv run python -m src.evaluate # backtest every model, about 4 hours on an Apple M2
+uv run pytest                 # add -m 'not network' to skip the Chronos-2 download
 ```
 
 Snapshots, processed data and results are not committed. The snapshot tests fail until a snapshot exists. A pull refuses to replace a snapshot from the same UTC date.
@@ -94,7 +96,7 @@ src/clean.py           time-base and duplicate repair, regular series, windows
 src/duplicates.py      day-by-day check of the duplicate repair
 src/erlang.py          Erlang B, C and A; required agents
 src/probe.py           staffing sensitivity probe
-src/baselines.py       Seasonal Naive, MSTL, Prophet, XGBoost
+src/baselines.py       Seasonal Naive, MSTL, Prophet, XGBoost, Chronos-2
 src/evaluate.py        weekly backtest and metrics
 data/special_days.csv  closed days, named events, source transitions
 notebooks/01_eda.ipynb seasonality and source breaks

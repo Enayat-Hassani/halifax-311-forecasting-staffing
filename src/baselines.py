@@ -1,9 +1,12 @@
-"""Seasonal Naive, MSTL, Prophet and XGBoost behind one interface.
+"""Seasonal Naive, MSTL, Prophet, XGBoost and Chronos-2 behind one interface.
 
 Each model fits on the history it is given and forecasts the `horizon` slots that follow
-it. Settings are fixed in advance; none is tuned on the test window.
+it. Settings are fixed in advance; none is tuned on the test window. A model that reads
+only the latest slots of its history has a `context`, in slots.
 """
 
+import multiprocessing
+from concurrent.futures import ProcessPoolExecutor
 from typing import Protocol
 
 import numpy as np
@@ -19,6 +22,7 @@ XGB_PARAMS = {
     "colsample_bytree": 0.8,
     "seed": 0,
 }
+CHRONOS_REVISION = "29ec3766d36d6f73f0696f85560a422f50e8498c"
 
 
 class Forecaster(Protocol):
@@ -31,6 +35,7 @@ class SeasonalNaive:
     """The last observed week, repeated."""
 
     name = "seasonal_naive"
+    context = WEEK
 
     def forecast(self, history: pd.Series, horizon: int) -> np.ndarray:
         return np.resize(history.to_numpy(dtype=float)[-WEEK:], horizon)
@@ -95,6 +100,45 @@ class XGBoostModel:
             history.index[-1] + pd.Timedelta(minutes=30), periods=horizon, freq="30min"
         )
         return model.predict(xgb.DMatrix(lag_features(history, future)))
+
+
+class Chronos2Model:
+    """Zero-shot Chronos-2 on the target alone. The point forecast is the median.
+
+    It runs in a worker process. On macOS, torch and xgboost load separate OpenMP
+    runtimes, and one process cannot hold both.
+    """
+
+    name = "chronos2"
+    context = 8192
+    _worker = None
+
+    def forecast(self, history: pd.Series, horizon: int) -> np.ndarray:
+        if self._worker is None:
+            self._worker = ProcessPoolExecutor(1, mp_context=multiprocessing.get_context("spawn"))
+        context = history.to_numpy(dtype=float)[-self.context :]
+        return self._worker.submit(_chronos_median, context, horizon).result()
+
+
+_pipeline = None
+
+
+def _chronos_median(context: np.ndarray, horizon: int) -> np.ndarray:
+    global _pipeline
+    import torch
+    from chronos import BaseChronosPipeline
+
+    if _pipeline is None:
+        _pipeline = BaseChronosPipeline.from_pretrained(
+            "amazon/chronos-2",
+            revision=CHRONOS_REVISION,
+            device_map="cpu",
+            torch_dtype=torch.float32,
+        )
+    quantiles, _ = _pipeline.predict_quantiles(
+        [context], prediction_length=horizon, quantile_levels=[0.5]
+    )
+    return quantiles[0].numpy().ravel()
 
 
 def lag_features(y: pd.Series, index: pd.DatetimeIndex) -> pd.DataFrame:

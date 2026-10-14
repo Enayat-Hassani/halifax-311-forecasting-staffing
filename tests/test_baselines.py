@@ -6,6 +6,7 @@ import pytest
 
 from src.baselines import (
     WEEK,
+    Chronos2Model,
     MSTLModel,
     ProphetModel,
     SeasonalNaive,
@@ -67,3 +68,12 @@ def test_xgboost_is_deterministic():
     assert np.array_equal(
         XGBoostModel().forecast(history, WEEK), XGBoostModel().forecast(history, WEEK)
     )
+
+
+@pytest.mark.network
+def test_chronos2_returns_the_same_finite_horizon_twice():
+    model = Chronos2Model()
+    first = model.forecast(_history(8), 2 * WEEK)
+    assert first.shape == (2 * WEEK,)
+    assert np.isfinite(first).all()
+    assert np.array_equal(first, model.forecast(_history(8), 2 * WEEK))

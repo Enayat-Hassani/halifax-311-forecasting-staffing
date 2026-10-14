@@ -6,6 +6,7 @@ training-window start up to the origin. Only open intervals of the target week a
 """
 
 import logging
+import time
 from pathlib import Path
 
 import numpy as np
@@ -13,6 +14,7 @@ import pandas as pd
 
 from src.baselines import (
     WEEK,
+    Chronos2Model,
     Forecaster,
     MSTLModel,
     ProphetModel,
@@ -46,7 +48,10 @@ def origins(series: pd.DataFrame) -> pd.DatetimeIndex:
 
 
 def backtest(model: Forecaster, series: pd.DataFrame, train_window: str) -> pd.DataFrame:
-    """One row per target slot: origin, ts, actual, forecast, is_open, day_kind."""
+    """One row per target slot: origin, ts, actual, forecast, is_open, day_kind, seconds.
+
+    `seconds` is the wall time of the origin's `forecast` call.
+    """
     history_all = cleanse(series)
     start = WINDOWS[train_window][0]
     horizon = (LEAD + TARGET) // SLOT
@@ -54,15 +59,18 @@ def backtest(model: Forecaster, series: pd.DataFrame, train_window: str) -> pd.D
     for origin in origins(series):
         history = history_all.loc[start : origin - SLOT]
         target = pd.date_range(origin + LEAD, periods=WEEK, freq="30min")
-        forecast = np.clip(model.forecast(history, horizon)[-WEEK:], 0.0, None)
+        started = time.perf_counter()
+        forecast = model.forecast(history, horizon)
+        seconds = time.perf_counter() - started
+        forecast = np.clip(forecast[-WEEK:], 0.0, None)
         rows = series.loc[target, ["demand", "is_open", "day_kind"]]
         frames.append(
             rows.rename(columns={"demand": "actual"})
-            .assign(origin=origin, forecast=forecast)
+            .assign(origin=origin, forecast=forecast, seconds=seconds)
             .rename_axis("ts")
             .reset_index()
         )
-    columns = ["origin", "ts", "actual", "forecast", "is_open", "day_kind"]
+    columns = ["origin", "ts", "actual", "forecast", "is_open", "day_kind", "seconds"]
     return pd.concat(frames, ignore_index=True)[columns]
 
 
@@ -138,6 +146,7 @@ RUNS = [
     (ProphetModel(yearly=True), "secondary"),
     (XGBoostModel(), "primary"),
     (XGBoostModel(), "secondary"),
+    (Chronos2Model(), "primary"),
 ]
 
 
@@ -151,18 +160,23 @@ def main(
     scale, peak = mase_scale(series), peak_keys(series)
     last_origin = origins(series)[-1]
 
-    tables = []
+    tables, costs = [], []
     for model, train_window in RUNS:
         path = out_dir / "forecasts" / f"{model.name}_{train_window}.parquet"
         if not path.exists():
             path.parent.mkdir(parents=True, exist_ok=True)
             backtest(model, series, train_window).to_parquet(path)
+        forecasts = pd.read_parquet(path)
+        context = getattr(model, "context", None)
         weeks = (last_origin - WINDOWS[train_window][0]).days // 7
-        label = "any" if model.name == "seasonal_naive" else train_window
+        if context:
+            weeks = min(weeks, context // WEEK)
+        label = "any" if context else train_window
         tables.append(
-            score(pd.read_parquet(path), scale, peak)
-            .assign(model=model.name, window=label, history_weeks=weeks)
+            score(forecasts, scale, peak).assign(model=model.name, window=label, history_weeks=weeks)
         )
+        seconds = forecasts.groupby("origin")["seconds"].first()
+        costs.append((model.name, label, seconds.iloc[0], seconds.median(), seconds.sum()))
     results = pd.concat(tables).rename_axis("split").reset_index()
 
     lines = [
@@ -172,7 +186,7 @@ def main(
         "week that starts seven days later, 2025-09-01 → 2026-08-30. Open intervals only. "
         "Bias is (forecast − actual) / actual, so a positive bias over-forecasts. "
         f"MASE is scaled by the in-sample Seasonal Naive MAE on primary training ({scale:.2f} calls). "
-        "History weeks are at the last origin.",
+        "History weeks are the weeks a model reads at the last origin.",
         "",
     ]
     for split, table in results.groupby("split", sort=False):
@@ -188,6 +202,18 @@ def main(
                 f"{r.rmse:.2f} | {r.mase:.3f} | {r.bias:+.1%} |"
             )
         lines.append("")
+    lines += [
+        "## Run cost",
+        "",
+        "Wall time of one forecast call on an Apple M2 CPU, comparable between models only. "
+        "The first call of Chronos-2 includes loading the model.",
+        "",
+        "| Model | Window | First (s) | Median (s) | 52 origins (min) |",
+        "|---|---|---:|---:|---:|",
+    ]
+    for name, label, first, median, total in costs:
+        lines.append(f"| {name} | {label} | {first:.1f} | {median:.1f} | {total / 60:.1f} |")
+    lines.append("")
     out = out_dir / "baselines.md"
     out.write_text("\n".join(lines))
     return out
