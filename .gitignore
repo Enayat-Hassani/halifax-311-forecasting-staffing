@@ -20,3 +20,5 @@ results/*
 !results/staffing_probe.md
 !results/baselines.md
 !results/duplicate_check.csv
+!results/decision.md
+!results/cost_ratio.png

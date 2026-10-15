@@ -11,7 +11,8 @@ counterfactual, not a roster.
 """
 
 import math
-from typing import Literal
+from functools import lru_cache
+from typing import Callable, Literal
 
 import numpy as np
 
@@ -186,3 +187,52 @@ def required_agents(
     ):
         agents += 1
     return agents
+
+
+@lru_cache(maxsize=None)
+def requirement_lookup(
+    model, target, answer_seconds, service_seconds, patience_seconds, interval_seconds
+) -> Callable[[np.ndarray], np.ndarray]:
+    """Required agents as a step function of calls, built from per-agent-count thresholds.
+
+    Service level falls as calls rise, so `thresholds[n - 1]` is the largest call count
+    that n agents still serve at `target`; it is found by bisection and extended on
+    demand. This returns the same integers as `required_agents` without searching
+    from one agent for every interval.
+    """
+    thresholds: list[float] = []
+
+    def meets(n: int, calls: float) -> bool:
+        return (
+            service_level(
+                model,
+                calls * service_seconds / interval_seconds,
+                n,
+                service_seconds=service_seconds,
+                answer_seconds=answer_seconds,
+                patience_seconds=patience_seconds,
+            )
+            >= target
+        )
+
+    def extend(max_calls: float) -> None:
+        while not thresholds or thresholds[-1] < max_calls:
+            n = len(thresholds) + 1
+            lo = thresholds[-1] if thresholds else 0.0
+            hi = max(2.0 * lo, n * interval_seconds / service_seconds)
+            while meets(n, hi):
+                hi *= 2.0
+            while hi - lo > 1e-9 * hi:
+                mid = 0.5 * (lo + hi)
+                if meets(n, mid):
+                    lo = mid
+                else:
+                    hi = mid
+            thresholds.append(lo)
+
+    def lookup(calls: np.ndarray) -> np.ndarray:
+        extend(float(calls.max()))
+        agents = np.searchsorted(thresholds, calls, side="left") + 1
+        return np.where(calls > 0, agents, 0)
+
+    return lookup

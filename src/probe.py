@@ -5,15 +5,13 @@ requirement changes. No model is fitted. The probe reads open intervals of the p
 training window, so the test window stays untouched.
 """
 
-from functools import lru_cache
 from pathlib import Path
-from typing import Callable
 
 import numpy as np
 import pandas as pd
 
 from src.clean import window
-from src.erlang import service_level
+from src.erlang import requirement_lookup
 
 WAPE_LEVELS = (0.05, 0.10, 0.20)
 SEEDS = range(20)
@@ -45,55 +43,6 @@ def perturb(actual: np.ndarray, wape: float, rng: np.random.Generator) -> np.nda
     return forecast
 
 
-@lru_cache(maxsize=None)
-def _requirement_lookup(
-    model, target, answer_seconds, service_seconds, patience_seconds, interval_seconds
-) -> Callable[[np.ndarray], np.ndarray]:
-    """Required agents as a step function of calls, built from per-agent-count thresholds.
-
-    Service level falls as calls rise, so `thresholds[n - 1]` is the largest call count
-    that n agents still serve at `target`; it is found by bisection and extended on
-    demand. This returns the same integers as `required_agents` without searching
-    from one agent for every interval.
-    """
-    thresholds: list[float] = []
-
-    def meets(n: int, calls: float) -> bool:
-        return (
-            service_level(
-                model,
-                calls * service_seconds / interval_seconds,
-                n,
-                service_seconds=service_seconds,
-                answer_seconds=answer_seconds,
-                patience_seconds=patience_seconds,
-            )
-            >= target
-        )
-
-    def extend(max_calls: float) -> None:
-        while not thresholds or thresholds[-1] < max_calls:
-            n = len(thresholds) + 1
-            lo = thresholds[-1] if thresholds else 0.0
-            hi = max(2.0 * lo, n * interval_seconds / service_seconds)
-            while meets(n, hi):
-                hi *= 2.0
-            while hi - lo > 1e-9 * hi:
-                mid = 0.5 * (lo + hi)
-                if meets(n, mid):
-                    lo = mid
-                else:
-                    hi = mid
-            thresholds.append(lo)
-
-    def lookup(calls: np.ndarray) -> np.ndarray:
-        extend(float(calls.max()))
-        agents = np.searchsorted(thresholds, calls, side="left") + 1
-        return np.where(calls > 0, agents, 0)
-
-    return lookup
-
-
 def compare_staffing(
     actual: np.ndarray,
     forecast: np.ndarray,
@@ -106,7 +55,7 @@ def compare_staffing(
     interval_seconds: float = 1800.0,
 ) -> dict:
     """Compare required agents from `forecast` with those from `actual`, interval by interval."""
-    lookup = _requirement_lookup(
+    lookup = requirement_lookup(
         model, target, answer_seconds, service_seconds, patience_seconds, interval_seconds
     )
     diff = lookup(forecast) - lookup(actual)
@@ -212,7 +161,7 @@ def run_probe(
         "",
     ]
     for name, (actual, interval) in grains.items():
-        req = _requirement_lookup(
+        req = requirement_lookup(
             PRIMARY["model"], PRIMARY["target"], PRIMARY["answer_seconds"],
             PRIMARY["service_seconds"], PRIMARY["patience_seconds"], interval,
         )(actual)

@@ -47,16 +47,22 @@ def origins(series: pd.DataFrame) -> pd.DatetimeIndex:
     return weeks - LEAD
 
 
-def backtest(model: Forecaster, series: pd.DataFrame, train_window: str) -> pd.DataFrame:
+def backtest(
+    model: Forecaster,
+    series: pd.DataFrame,
+    train_window: str,
+    at: pd.DatetimeIndex | None = None,
+) -> pd.DataFrame:
     """One row per target slot: origin, ts, actual, forecast, is_open, day_kind, seconds.
 
-    `seconds` is the wall time of the origin's `forecast` call.
+    Runs the origins `at`, by default the test origins. `seconds` is the wall time of the
+    origin's `forecast` call.
     """
     history_all = cleanse(series)
     start = WINDOWS[train_window][0]
     horizon = (LEAD + TARGET) // SLOT
     frames = []
-    for origin in origins(series):
+    for origin in origins(series) if at is None else at:
         history = history_all.loc[start : origin - SLOT]
         target = pd.date_range(origin + LEAD, periods=WEEK, freq="30min")
         started = time.perf_counter()
@@ -74,7 +80,7 @@ def backtest(model: Forecaster, series: pd.DataFrame, train_window: str) -> pd.D
     return pd.concat(frames, ignore_index=True)[columns]
 
 
-def _key(ts: pd.DatetimeIndex) -> list[tuple[bool, int]]:
+def slot_key(ts: pd.DatetimeIndex) -> list[tuple[bool, int]]:
     return list(zip(ts.dayofweek >= 5, ts.hour * 2 + ts.minute // 30))
 
 
@@ -107,23 +113,27 @@ def post_closure_days(days: pd.DataFrame) -> pd.DatetimeIndex:
     return pd.DatetimeIndex(found)
 
 
-def score(forecasts: pd.DataFrame, scale: float, peak: set) -> pd.DataFrame:
-    """One row per split: all, peak, off_peak, post_closure."""
+def splits(forecasts: pd.DataFrame, peak: set) -> dict[str, np.ndarray]:
+    """Row masks for the splits all, peak, off_peak and post_closure."""
     ts = pd.DatetimeIndex(forecasts["ts"])
     days = (
         forecasts.assign(date=ts.normalize())
         .groupby("date")
         .agg(kind=("day_kind", "first"), open=("is_open", "any"))
     )
-    is_peak = np.array([k in peak for k in _key(ts)])
-    splits = {
+    is_peak = np.array([k in peak for k in slot_key(ts)])
+    return {
         "all": np.ones(len(forecasts), bool),
         "peak": is_peak,
         "off_peak": ~is_peak,
         "post_closure": ts.normalize().isin(post_closure_days(days)),
     }
+
+
+def score(forecasts: pd.DataFrame, scale: float, peak: set) -> pd.DataFrame:
+    """One row per split: all, peak, off_peak, post_closure."""
     rows = {}
-    for name, mask in splits.items():
+    for name, mask in splits(forecasts, peak).items():
         f = forecasts[mask & forecasts["is_open"].to_numpy()]
         error = f["forecast"] - f["actual"]
         total = f["actual"].sum()
