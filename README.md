@@ -20,7 +20,7 @@ Does the most accurate forecast give the best staffing? This project tests eight
 
 ![WAPE against agent-hours error](results/figures/accuracy_staffing.png)
 
-**3. WAPE hides the direction of error, and the direction matters when understaffing costs more.** Chronos-2 and Prophet (secondary) have the same staffing error, but Chronos-2 under-forecasts by 4.4%. It understaffs 37% of intervals against 29%, and its agents answer 78.4% of calls in 25 s, below the 80% target. Staffed from the point forecast at a cost ratio of 16, Chronos-2 falls from third to seventh. Its errors also follow the season: like MSTL, it tracks the recent level and misses the turns, over-forecasting November by 23% and under-forecasting January by 21%.
+**3. WAPE hides the direction of error, and the direction matters when understaffing costs more.** Chronos-2 and Prophet (secondary) have the same staffing error, but Chronos-2 under-forecasts by 4.4%. It understaffs 37% of intervals against 29%, and Erlang A expects its agents to answer 78.4% of calls in 25 s, below the 80% target. Staffed from the point forecast at a cost ratio of 16, Chronos-2 falls from third to seventh. Its errors also follow the season: like MSTL, it tracks the recent level and misses the turns, over-forecasting November by 23% and under-forecasting January by 21%.
 
 ![Monthly bias by model](results/figures/bias_by_month.png)
 
@@ -28,11 +28,11 @@ Does the most accurate forecast give the best staffing? This project tests eight
 
 ![Weekly cost by cost ratio](results/figures/buffer.png)
 
-These results are for one aggregate queue at this volume, a one-week lead and linear costs. A smaller queue or a model with a larger bias can change them. Over the year the 80% quantile covers 76–82% of actual demand, but only 51–81% in January to March, which the calibration weeks (February to August) do not include.
+These results are for one test year, one aggregate queue at this volume, a one-week lead and linear costs. A smaller queue or a model with a larger bias can change them. Over the year the 80% quantile covers 76–82% of actual demand, but only 51–81% in January to March, which the calibration weeks (February to August) do not include.
 
 ## Results
 
-| Run | WAPE | Bias | Agent-hours error / week | Difference from best | Understaffed | Service level |
+| Run | WAPE | Bias | Agent-hours error / week | Difference from best | Understaffed | Modelled service level |
 |---|---:|---:|---:|---:|---:|---:|
 | XGBoost (secondary) | 19.3% | −0.0% | 62.6 | best | 29.6% | 80.6% |
 | XGBoost (primary) | 19.8% | +1.5% | 64.5 | +1.8 (−0.2 to +4.3) | 27.9% | 81.5% |
@@ -44,7 +44,7 @@ These results are for one aggregate queue at this volume, a one-week lead and li
 | Seasonal Naive | 26.1% | +0.5% | 85.5 | +22.8 (+19.3 to +28.0) | 34.8% | 79.5% |
 | Poisson oracle floor | 13.4% | | 44.2 | | | |
 
-Point staffing, primary scenario, open intervals. The difference from best is the mean weekly difference in agent-hours error, with a 95% moving-block bootstrap interval; an interval that contains zero does not separate the runs. Service level is the share of actual calls answered in 25 s by the staffed agents, under Erlang A.
+Point staffing, primary scenario, open intervals. The difference from best is the mean weekly difference in agent-hours error, with a 95% moving-block bootstrap interval; an interval that contains zero does not separate the runs. Modelled service level is the share of actual calls that Erlang A expects the staffed agents to answer in 25 s. It is not a measured service level.
 
 A warm Chronos-2 forecast takes 0.3 s, against 1–2.5 s for XGBoost and 15–90 s for MSTL and Prophet, so run cost does not decide between these models at this scale.
 
@@ -61,7 +61,7 @@ The target is agent demand: `HANDLED + ABANDONED` per half-hour. `OFFERED` also 
 | Defect | How it shows | Evidence | Repair |
 |---|---|---|---|
 | From 2024-07-17, each interval is a fixed UTC+4 timestamp | The weekday peak moves to the late afternoon, and Saturday 01:00 carries Friday-evening calls | Read as UTC+4, the profile matches the pre-2023 profile at correlation 0.9997, against 0.96–0.97 at ±30 minutes | Convert the labels to Halifax local time |
-| From 2023-05-23 to 2024-07-16, most days are counted twice | Agent demand doubles overnight and halves fourteen months later | On 395 of 407 days every count is even. On each of those days, published calls are twice the distinct call IDs in HRM's per-call dataset | Halve the doubled days. Repaired calls then equal the distinct call IDs on every day |
+| From 2023-05-23 to 2024-07-16, most days are counted twice | Agent demand doubles overnight and halves fourteen months later | On 395 of 407 days every count is even. On each of those days, published calls are 2.00–2.03 times the distinct call IDs in HRM's per-call dataset | Halve the doubled days. Repaired calls are within 1.3% of the distinct call IDs on every halved day, and equal on 379 of 395 ([duplicate_check.csv](results/duplicate_check.csv)) |
 
 The repaired FY2023/24 volume matches HRM's published figure within 5%. [data_audit.md](data/raw/data_audit.md) has the full evidence. 2024-07-17 is also a platform cutover, after which abandonment is lower, so models train on two windows:
 
