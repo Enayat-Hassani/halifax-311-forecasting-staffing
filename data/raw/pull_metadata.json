@@ -1,0 +1,25 @@
+{
+  "service_url": "https://services2.arcgis.com/11XBiaBYA9Ep0yNJ/arcgis/rest/services/311_Call_Volumes/FeatureServer/0/query",
+  "query_params": {
+    "where": "1=1",
+    "outFields": "*",
+    "orderByFields": "ObjectId"
+  },
+  "pulled_at_utc": "2026-09-13T16:13:38.366876Z",
+  "service_reported_count": 148269,
+  "rows_written": 148269,
+  "field_names": [
+    "CALL_DATE",
+    "MILITARY_HOUR",
+    "INTERVAL",
+    "OFFERED",
+    "HANDLED",
+    "ABANDONED",
+    "PROCESSED_IN_IVR",
+    "TOTAL_TALK_TIME",
+    "AVERAGE_TALK_TIME",
+    "ObjectId"
+  ],
+  "object_id_min": 1,
+  "object_id_max": 148269
+}

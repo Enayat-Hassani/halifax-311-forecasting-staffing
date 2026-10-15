@@ -15,6 +15,7 @@ data/processed/*
 results/*
 !data/raw/.gitkeep
 !data/raw/data_audit.md
+!data/raw/pull_metadata.json
 !data/processed/.gitkeep
 !results/.gitkeep
 !results/staffing_probe.md
