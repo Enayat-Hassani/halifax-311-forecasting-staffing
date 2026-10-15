@@ -22,3 +22,4 @@ results/*
 !results/duplicate_check.csv
 !results/decision.md
 !results/cost_ratio.png
+!results/figures/
