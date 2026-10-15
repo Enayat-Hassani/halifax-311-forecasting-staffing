@@ -1,1 +1,1 @@
-"""WFM forecasting benchmark on the Halifax 311 contact-centre series."""
+"""Contact-centre forecasting and staffing: a Halifax 311 case study."""

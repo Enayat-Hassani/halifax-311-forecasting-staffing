@@ -68,7 +68,7 @@ from a week before the period to a week after it, and writes the daily counts to
 | 12 not halved, inside the period | 1.000 | 1.000 |
 | 6 open days before the period | 1.000 | 1.000 |
 
-The rule and Call Details agree on every day. In the week after the period, totals agree
+The rule and Call Details agree on which days are doubled. Repaired counts equal the distinct IDs on 379 of the 395 halved days, and are within 1.3% on the rest. In the week after the period, totals agree
 within 4%. Single days there differ by up to 18%, probably because the two services place
 the post-cutover time base differently.
 

@@ -235,12 +235,13 @@ def main(
         "",
         "## Accuracy and staffing, point forecast",
         "",
-        "Staffed from the point forecast, primary scenario. Service level is the share of "
-        "actual calls answered within 25 s by the staffed agents, under Erlang A. The Poisson "
+        "Staffed from the point forecast, primary scenario. Modelled service level is the "
+        "share of actual calls that Erlang A expects the staffed agents to answer in 25 s. It is "
+        "not a measured service level. The Poisson "
         "oracle floor is a forecast that knows the true rate when demand is Poisson around it; real "
         "arrivals are overdispersed, so the true floor is higher.",
         "",
-        "| Run | WAPE | Bias | WAPE rank | Agent-hours error | Short | Over | Error rank | Understaffed | Service level |",
+        "| Run | WAPE | Bias | WAPE rank | Agent-hours error | Short | Over | Error rank | Understaffed | Modelled service level |",
         "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     wape_rank, error_rank = _rank(wape), _rank(error)

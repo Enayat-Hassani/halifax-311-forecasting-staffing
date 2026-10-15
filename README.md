@@ -1,11 +1,11 @@
-# WFM Forecasting Benchmark
+# Contact-Centre Forecasting and Staffing: A Halifax 311 Case Study
 
 Does the most accurate forecast give the best staffing? This project tests eight forecasts of contact-centre demand by the staffing decision they cause, not only by their error. The data is Halifax Regional Municipality's half-hourly 311 call volume. Each Monday, every model forecasts the week that starts seven days later, the horizon at which a schedule is built. Each forecast then goes through an Erlang A model to give the agents needed per half-hour, and is compared with the agents that actual demand needed. The test is 52 weeks, September 2025 to August 2026.
 
 **Terms used below**
 
 - **WAPE**: total absolute forecast error divided by total actual calls.
-- **Staffing error**: the gap between the agents a forecast asks for and the agents actual demand needed, in agent-hours per week. One agent for one half-hour is 0.5 agent-hours.
+- **Staffing error**: the gap between the productive agents a forecast asks for and the productive agents actual demand needed, in agent-hours per week. One agent for one half-hour is 0.5 agent-hours. It is an error, not the hours the centre works.
 - **Cost ratio r**: how many spare agent-hours one short agent-hour costs. At r = 1 both cost the same.
 - **Primary and secondary**: models trained on the data after the July 2024 platform change only, or on all data from 2017.
 - **Scenarios**: the staffing inputs changed one at a time: service target, caller patience, handle time, and Erlang C in place of Erlang A.
@@ -56,7 +56,7 @@ This is what a typical week looks like: the test week of median XGBoost WAPE.
 
 ## Data
 
-The target is agent demand: `HANDLED + ABANDONED` per half-hour. `OFFERED` also counts calls that end in the IVR, and runs about 48% higher. Agents work weekdays 08:00–20:00 and weekends 09:00–17:30, and statutory holidays are closed. Forecasts are scored and staffed on open intervals only.
+The data is HRM's open [311 Call Volumes](https://services2.arcgis.com/11XBiaBYA9Ep0yNJ/arcgis/rest/services/311_Call_Volumes/FeatureServer/0) service, half-hourly from 2017. `src/ingest.py` pulls it. The target is agent demand: `HANDLED + ABANDONED` per half-hour. `OFFERED` also counts calls that end in the IVR, and runs about 48% higher. Agents work weekdays 08:00–20:00 and weekends 09:00–17:30, and statutory holidays are closed. Forecasts are scored and staffed on open intervals only.
 
 | Defect | How it shows | Evidence | Repair |
 |---|---|---|---|
@@ -73,11 +73,11 @@ The repaired FY2023/24 volume matches HRM's published figure within 5%. [data_au
 
 ## Method
 
-**Forecasts.** Seasonal Naive, MSTL and Prophet are the statistical baselines. XGBoost forecasts every slot from the calendar and from the same slot 2–5 and 52 weeks earlier; no lag is shorter than the 14 days from the origin to the end of the target week. Chronos-2 forecasts zero-shot from the last 24 weeks, its maximum context. Closed days in the history are replaced by the last open day of the same weekday. No setting is tuned on the test window.
+**Forecasts.** Each model stands for one approach a planning team can use: Seasonal Naive is the floor that any model must beat; MSTL and Prophet are statistical decomposition; XGBoost is machine learning on calendar and lag features; Chronos-2 is a pretrained foundation model with no training on this series. XGBoost forecasts every slot from the calendar and from the same slot 2–5 and 52 weeks earlier; no lag is shorter than the 14 days from the origin to the end of the target week. Chronos-2 forecasts zero-shot from the last 24 weeks, its maximum context. Closed days in the history are replaced by the last open day of the same weekday. No setting is tuned on the test window.
 
 **Staffing.** Each forecast gives the integer agent requirement per open half-hour. Staffing error is the gap to the requirement of actual demand, in agent-hours. Cost is r × short + over, with the cost ratio r swept from 0.25 to 16. Before any model was built, a probe showed that 10% WAPE changes the requirement in 39% of open half-hours ([staffing_probe.md](results/staffing_probe.md)).
 
-**Assumptions.** Halifax publishes call counts, not rosters, so the requirements are counterfactual, and no figure is a claim about HRM costs. The unit is the productive requirement per half-hour; breaks, shrinkage and shifts are out of scope.
+**Assumptions.** Halifax publishes call counts, not rosters, so the requirements are counterfactual, and no figure is a claim about HRM costs. The unit is the productive requirement per half-hour; breaks, shrinkage, shifts, headcount and FTE are out of scope.
 
 - **Erlang A, with Erlang C as comparator.** The data records abandoned calls, and Erlang C assumes none.
 - **80% in 25 s**, from HRM documents (2010–2014); 75% in 25 s (2017–2019) is a scenario. No later target is published.
