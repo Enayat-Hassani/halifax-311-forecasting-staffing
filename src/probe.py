@@ -1,6 +1,6 @@
 """Staffing sensitivity probe.
 
-Perturbs actual agent demand to a fixed WAPE and measures how often the integer staffing
+Perturbs actual agent-queue volume to a fixed WAPE and measures how often the integer staffing
 requirement changes. No model is fitted. The probe reads open intervals of the primary
 training window, so the test window stays untouched.
 """

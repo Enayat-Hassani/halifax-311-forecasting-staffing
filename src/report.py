@@ -49,7 +49,7 @@ def _save(fig, path: Path) -> None:
 
 
 def repair(raw: pd.DataFrame, series: pd.DataFrame, path: Path) -> None:
-    """Daily agent demand as published and as repaired, 28-day mean."""
+    """Daily agent-queue volume as published and repaired, 28-day mean."""
     published = (raw["HANDLED"] + raw["ABANDONED"]).groupby(local_time(raw).dt.normalize()).sum()
     repaired = series["demand"].resample("D").sum()
     span = slice("2022-01-01", "2025-08-31")
@@ -58,9 +58,9 @@ def repair(raw: pd.DataFrame, series: pd.DataFrame, path: Path) -> None:
     ax.plot(published[span].rolling(28).mean(), color="#d62728", label="As published")
     ax.plot(repaired[span].rolling(28).mean(), color="#1f77b4", label="Repaired")
     ax.xaxis.set_major_formatter(matplotlib.dates.DateFormatter("%b %Y"))
-    ax.set_ylabel("Agent calls per day, 28-day mean")
+    ax.set_ylabel("Agent-queue calls per day, 28-day mean")
     ax.set_ylim(0)
-    ax.set_title("Published 311 agent demand doubled for 14 months")
+    ax.set_title("Published 311 agent-queue volume doubled for 14 months")
     ax.legend(loc="lower left")
     _save(fig, path)
 
@@ -86,7 +86,7 @@ def week(runs: dict[str, pd.DataFrame], path: Path) -> None:
 
 
 def accuracy_staffing(runs: dict[str, pd.DataFrame], test: pd.DataFrame, path: Path) -> None:
-    """WAPE against weekly agent-hours error, point staffing, with the Poisson oracle floor."""
+    """WAPE against weekly net staffing error, with the simulated Poisson floor."""
     lookup = _lookup(PRIMARY)
     fig, ax = plt.subplots(figsize=(8, 4.5))
     for file, f in runs.items():
@@ -99,13 +99,13 @@ def accuracy_staffing(runs: dict[str, pd.DataFrame], test: pd.DataFrame, path: P
                     textcoords="offset points", ha="right" if file in RIGHT_ALIGNED else "left")
     floor = poisson_floor(test)
     ax.scatter(floor["wape"], floor["short"] + floor["over"], marker="x", color="black")
-    ax.annotate("Poisson oracle floor: the true rate, known in advance",
+    ax.annotate("Poisson floor: observed volume used as the rate",
                 (floor["wape"], floor["short"] + floor["over"]),
                 fontsize=8, xytext=(6, -3), textcoords="offset points")
     ax.xaxis.set_major_formatter(matplotlib.ticker.PercentFormatter(1, decimals=0))
     ax.set_xlabel("WAPE (lower is better)")
-    ax.set_ylabel("Staffing error, agent-hours per week")
-    ax.set_title("Accuracy and staffing error rank the models alike")
+    ax.set_ylabel("Net staffing error, agent-hours per week")
+    ax.set_title("WAPE and net staffing error produce similar rankings")
     _save(fig, path)
 
 
@@ -145,7 +145,7 @@ def buffer(runs: dict[str, pd.DataFrame], calib: dict[str, pd.DataFrame], peak: 
     fig, ax = plt.subplots(figsize=(8, 4.5))
     for method, color, label in (
         ("point", "#d62728", "Staffed to the point forecast"),
-        ("uplift", "#1f77b4", "Staffed to the point forecast x uplift"),
+        ("uplift", "#1f77b4", "Point forecast with calibrated uplift"),
     ):
         c = np.array(cost[method])
         ax.fill_between(RATIOS, c.min(axis=0), c.max(axis=0), color=color, alpha=0.25)
@@ -156,9 +156,9 @@ def buffer(runs: dict[str, pd.DataFrame], calib: dict[str, pd.DataFrame], peak: 
     ax.set_xscale("log", base=2)
     ax.xaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda x, _: f"{x:g}"))
     ax.set_xlabel("Cost ratio r: one short agent-hour costs r spare agent-hours")
-    ax.set_ylabel("Weekly cost, in spare agent-hours")
-    ax.set_title("A buffer pays more as understaffing costs more")
-    ax.legend(loc="upper left", title="Line: best run. Band: best to worst of 8 runs",
+    ax.set_ylabel("Modelled weekly penalty, spare agent-hours")
+    ax.set_title("Forecast uplift reduces penalty as understaffing cost rises")
+    ax.legend(loc="upper left", title="Line: lowest penalty. Band: range across 8 runs",
               title_fontsize=8, fontsize=9)
     _save(fig, path)
 
