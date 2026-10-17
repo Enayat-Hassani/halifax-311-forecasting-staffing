@@ -2,7 +2,7 @@
 
 ## Project overview
 
-This case study tests whether a more accurate contact-volume forecast also produces a more accurate net staffing requirement. It compares eight forecasting runs from five model families by WAPE, net staffing error, understaffed intervals, modelled service level, and an asymmetric understaffing penalty.
+This case study measures how contact-volume forecast accuracy and bias carry into net staffing requirements. It compares eight forecasting runs from five model families, first with equal shortage and surplus costs, then with a higher penalty for understaffing.
 
 The analysis uses half-hourly 311 call volumes published by Halifax Regional Municipality (HRM). Every Monday, each run forecasts the week beginning seven days later. Erlang A converts forecast volume and service time into the net agents required in each half-hour. That requirement is compared with the requirement calculated from actual calls.
 
