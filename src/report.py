@@ -121,7 +121,7 @@ def bias_by_month(runs: dict[str, pd.DataFrame], path: Path) -> None:
     ax.yaxis.set_major_formatter(matplotlib.ticker.PercentFormatter(1, decimals=0))
     ax.xaxis.set_major_formatter(matplotlib.dates.DateFormatter("%b %Y"))
     ax.set_ylabel("Monthly bias (above 0 = over-forecast)")
-    ax.set_title("Errors follow the season, and Chronos-2 misses the turns")
+    ax.set_title("Monthly bias differs by model and training window")
     ax.legend()
     _save(fig, path)
 

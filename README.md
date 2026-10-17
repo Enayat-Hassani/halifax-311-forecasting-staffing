@@ -30,7 +30,7 @@ These problems matter because a model trained on the published series would lear
 
 When staffing is based directly on point forecasts and understaffing and overstaffing have equal costs, the WAPE ranking closely matches the ranking by staffing error. Across all six staffing scenarios, the rank correlation is between 0.95 and 1.00.
 
-XGBoost performs best. Every other model has a higher staffing error by an amount the bootstrap separates from zero, based on paired weekly differences and a moving-block bootstrap with four-week blocks.
+XGBoost (secondary) has the lowest staffing error. Its bootstrap interval separates it from every non-XGBoost run, but not from XGBoost (primary), based on paired weekly differences and a moving-block bootstrap with four-week blocks.
 
 There is also a limit to how accurate any model can be. With roughly 32 calls per open half-hour, even a forecast that knew the true arrival rate would have an estimated WAPE of 13.4% and a staffing error of 44 agent-hours per week if calls followed a Poisson process. The best model reaches 19.3% WAPE and 63 agent-hours of weekly staffing error. The models differ only in the error left above that floor.
 
@@ -44,7 +44,7 @@ Chronos-2 and the secondary Prophet model have the same weekly staffing error, b
 
 When the cost of understaffing is set to 16 times the cost of having spare capacity, Chronos-2 drops from third place to seventh when staffing is based on its point forecast.
 
-Its errors also vary with the season. Like MSTL, it responds to recent demand levels but misses changes in direction. It over-forecasts November by 23% and under-forecasts January by 21%.
+The univariate Chronos-2 run over-forecasts November by 23% and under-forecasts January by 21%. It uses 24 weeks of the target series and no calendar or holiday covariates. Seasonal Naive, MSTL and Prophet (primary) show the same swing; none has an annual signal. Both XGBoost runs, which use a 52-week lag, and Prophet (secondary), with yearly seasonality, keep November and January within about 11%. The Prophet runs also use different training windows, so their gap does not isolate either change.
 
 ![Monthly bias by model](results/figures/bias_by_month.png)
 
@@ -86,7 +86,7 @@ For accuracy at peak, off-peak, and after closures, along with runtime, see [bas
 
 ## Data
 
-The project uses HRM's open [311 Call Volumes service](https://services2.arcgis.com/11XBiaBYA9Ep0yNJ/arcgis/rest/services/311_Call_Volumes/FeatureServer/0), which contains half-hourly records dating back to 2017. The ingestion script is `src/ingest.py`.
+The project uses HRM's [311 Call Volumes](https://data-hrm.hub.arcgis.com/datasets/HRM::311-call-volumes) data under its [Open Data Licence](https://data-hrm.hub.arcgis.com/pages/open-data-licence). The service contains half-hourly records dating back to 2017. The snapshot used for the reported results is committed at `data/raw/call_volumes_2026-09-13.parquet`; `pull_metadata.json` records its source, extraction time and SHA-256 hash.
 
 The target is agent demand, calculated as `HANDLED + ABANDONED` calls in each half-hour. `OFFERED` also includes calls that end in the interactive voice response system (IVR), and is about 48% higher. The centre is treated as open from 08:00 to 20:00 on weekdays and from 09:00 to 17:30 on weekends. It is closed on statutory holidays. Forecasts are evaluated and converted to staffing requirements for open intervals only.
 
@@ -120,7 +120,7 @@ Each model represents a different approach a planning team could use:
 
 XGBoost predicts each half-hour using calendar information and demand from the same slot two to five weeks earlier and 52 weeks earlier. To avoid using information that would not have been available when a schedule was made, no lag is shorter than the 14 days between the forecast origin and the end of the target week.
 
-Chronos-2 makes zero-shot forecasts using the most recent 24 weeks, which is its maximum context window. Closed days in the historical data are replaced with the most recent open day of the same weekday. No model settings are tuned using the test period.
+Chronos-2 makes univariate zero-shot forecasts from the target series using the most recent 24 weeks, which is its maximum context window. It receives no calendar or holiday covariates. Closed days in the historical data are replaced with the most recent open day of the same weekday. No model settings are tuned using the test period.
 
 ### Turning forecasts into staffing decisions
 
@@ -170,7 +170,6 @@ The project uses [uv](https://docs.astral.sh/uv/) and Python 3.11–3.12.
 
 ```sh
 uv sync
-uv run python -m src.ingest     # Download a dated snapshot into data/raw/
 uv run python -m src.clean      # Create data/processed/series.parquet
 uv run python -m src.duplicates # Check duplicate repairs against per-call records
 uv run python -m src.probe      # Create results/staffing_probe.md
@@ -180,7 +179,7 @@ uv run python -m src.report     # Generate figures in results/figures/
 uv run pytest                   # Add -m 'not network' to skip the Chronos-2 download
 ```
 
-Snapshots, processed data, and most results are not committed to the repository. [pull_metadata.json](data/raw/pull_metadata.json) records the query, pull time, and row count of the snapshot used here. `uv.lock` pins every package, and `src/baselines.py` pins the Chronos-2 model revision. Snapshot tests will fail until a snapshot is available. The ingestion step will not replace a snapshot created on the same UTC date.
+The commands above use the committed snapshot. Run `uv run python -m src.ingest` to download a current dated snapshot; subsequent cleaning uses the latest snapshot in `data/raw/`. Processed data and intermediate forecasts are not committed. `uv.lock` pins every package, and `src/baselines.py` pins the Chronos-2 model revision.
 
 ## Repository structure
 

@@ -1,11 +1,16 @@
 {
   "service_url": "https://services2.arcgis.com/11XBiaBYA9Ep0yNJ/arcgis/rest/services/311_Call_Volumes/FeatureServer/0/query",
+  "dataset_url": "https://data-hrm.hub.arcgis.com/datasets/HRM::311-call-volumes",
+  "license": "Halifax Regional Municipality Open Data Licence",
+  "license_url": "https://data-hrm.hub.arcgis.com/pages/open-data-licence",
   "query_params": {
     "where": "1=1",
     "outFields": "*",
     "orderByFields": "ObjectId"
   },
   "pulled_at_utc": "2026-09-13T16:13:38.366876Z",
+  "snapshot_file": "call_volumes_2026-09-13.parquet",
+  "sha256": "73c4c74ad170d88f39d33eb7a562db85f79a316a1656e88afa2fcd04db8652a0",
   "service_reported_count": 148269,
   "rows_written": 148269,
   "field_names": [

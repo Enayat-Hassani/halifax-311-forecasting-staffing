@@ -194,16 +194,18 @@ def main(
     peak = peak_keys(series)
     calibrate(series, out_dir)
 
-    results, primary_runs = {}, []
+    results, primary_runs, floor = {}, [], None
     for model, train_window in RUNS:
         label = "any" if getattr(model, "context", None) else train_window
         run = f"{model.name} ({label})"
         file = f"{model.name}_{train_window}.parquet"
         test = pd.read_parquet(out_dir / "forecasts" / file)
+        if floor is None:
+            floor = poisson_floor(test)
         results[run] = evaluate_run(test, pd.read_parquet(out_dir / "calibration" / file), peak)
         if train_window == "primary":
             primary_runs.append(run)
-    floor = poisson_floor(test)
+    assert floor is not None
     runs = list(results)
     primary = {run: r["primary"] for run, r in results.items()}
     wape = pd.Series({run: r["wape"] for run, r in results.items()})

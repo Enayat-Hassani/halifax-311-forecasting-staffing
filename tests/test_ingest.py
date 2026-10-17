@@ -1,5 +1,6 @@
 """Ingest tests. None of these hit the network."""
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -12,8 +13,13 @@ RAW_DIR = Path("data/raw")
 
 METADATA_KEYS = {
     "service_url",
+    "dataset_url",
+    "license",
+    "license_url",
     "query_params",
     "pulled_at_utc",
+    "snapshot_file",
+    "sha256",
     "service_reported_count",
     "rows_written",
     "field_names",
@@ -45,6 +51,11 @@ def test_rows_written_matches_service_reported_count(metadata):
 
 def test_rows_written_matches_snapshot_row_count(snapshot_df, metadata):
     assert len(snapshot_df) == metadata["rows_written"]
+
+
+def test_snapshot_matches_recorded_hash(metadata):
+    snapshot = RAW_DIR / metadata["snapshot_file"]
+    assert hashlib.sha256(snapshot.read_bytes()).hexdigest() == metadata["sha256"]
 
 
 def test_no_duplicate_object_id(snapshot_df):

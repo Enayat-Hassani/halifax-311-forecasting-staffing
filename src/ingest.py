@@ -8,6 +8,7 @@ requires. Cleaning is in src/clean.py.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from collections.abc import Iterator
@@ -21,6 +22,8 @@ SERVICE_URL = (
     "https://services2.arcgis.com/11XBiaBYA9Ep0yNJ/arcgis/rest/services/"
     "311_Call_Volumes/FeatureServer/0/query"
 )
+DATASET_URL = "https://data-hrm.hub.arcgis.com/datasets/HRM::311-call-volumes"
+LICENSE_URL = "https://data-hrm.hub.arcgis.com/pages/open-data-licence"
 
 QUERY_PARAMS = {"where": "1=1", "outFields": "*", "orderByFields": "ObjectId"}
 
@@ -277,8 +280,13 @@ def pull(raw_dir: Path = Path("data/raw")) -> Path:
 
         metadata = {
             "service_url": SERVICE_URL,
+            "dataset_url": DATASET_URL,
+            "license": "Halifax Regional Municipality Open Data Licence",
+            "license_url": LICENSE_URL,
             "query_params": QUERY_PARAMS,
             "pulled_at_utc": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "snapshot_file": parquet_path.name,
+            "sha256": hashlib.sha256(parquet_path.read_bytes()).hexdigest(),
             "service_reported_count": reported_count,
             "rows_written": len(df),
             "field_names": df.columns.tolist(),
