@@ -2,6 +2,8 @@
 
 Does the most accurate forecast also give the best staffing? This project tests that question on public call data from Halifax 311, the city's contact centre.
 
+**[View the interactive results page](https://enayat-hassani.github.io/halifax-311-forecasting-staffing/)**
+
 Nine forecast runs from five model families were compared over 52 weeks (September 2025 to August 2026). Each forecast was converted into the number of agents needed every half-hour, using Erlang A, and compared with what actual call volume required.
 
 **Main results**

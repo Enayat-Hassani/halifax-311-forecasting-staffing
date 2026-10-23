@@ -5,6 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="A Halifax 311 study of how forecast model choice and cost-based calibration affect staffing cost and shortage risk.">
   <title>Halifax 311 · Forecast to staffing</title>
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://enayat-hassani.github.io/halifax-311-forecasting-staffing/">
+  <meta property="og:title" content="Similar forecast error, different staffing risk">
+  <meta property="og:description" content="A Halifax 311 study of how forecast model choice and cost-based calibration affect staffing cost and shortage risk.">
+  <meta property="og:image" content="https://enayat-hassani.github.io/halifax-311-forecasting-staffing/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
@@ -269,7 +277,7 @@
     </ol>
     <p class="col note repair" data-reveal>Before modelling, the published data was repaired: one year was largely counted twice (about 61% too high), and later timestamps were four hours off.</p>
 
-    <figure class="wide" id="evidence">
+    <figure class="col" id="evidence">
       <svg id="accuracy-plot" class="chart" viewBox="0 0 640 400" role="img" aria-label="Scatter plot of WAPE against the share of understaffed intervals for nine forecasting runs. Prophet secondary and Chronos-2 have almost the same WAPE, but Chronos-2 is understaffed in 8.3 points more intervals."></svg>
       <figcaption><b>Figure 1.</b> Each dot is one forecast run, staffed from its forecast as is. <span class="ref" tabindex="0" data-model="Prophet · secondary">Prophet (secondary)</span> and <span class="ref is-accent" tabindex="0" data-model="Chronos-2">Chronos-2</span> have almost the same error and the same weekly staffing error (70.2 agent-hours). But Chronos-2 forecasts 4.4% too low, so more half-hours are short.</figcaption>
     </figure>
@@ -546,7 +554,7 @@
 
     function drawAccuracyPlot() {
       const add = svgAdder(document.querySelector("#accuracy-plot"));
-      const w = 640, h = 400, m = { top: 24, right: 24, bottom: 52, left: 52 };
+      const w = 640, h = 400, m = { top: 40, right: 24, bottom: 52, left: 52 };
       const xMin = 18, xMax = 27, yMin = 25, yMax = 40;
       const x = v => m.left + (v - xMin) / (xMax - xMin) * (w - m.left - m.right);
       const y = v => h - m.bottom - (v - yMin) / (yMax - yMin) * (h - m.top - m.bottom);
