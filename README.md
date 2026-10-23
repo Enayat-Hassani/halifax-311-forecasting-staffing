@@ -1,106 +1,126 @@
 # Contact-Centre Forecasting and Staffing: A Halifax 311 Case Study
 
-## Project overview
+Does the most accurate forecast also give the best staffing? This project tests that question on public call data from Halifax 311, the city's contact centre.
 
-This case study measures how contact-volume forecast accuracy and bias carry into net staffing requirements. It compares eight forecasting runs from five model families, first with equal shortage and surplus costs, then with a higher penalty for understaffing.
+Nine forecast runs from five model families were compared over 52 weeks (September 2025 to August 2026). Each forecast was converted into the number of agents needed every half-hour, using Erlang A, and compared with what actual call volume required.
 
-The analysis uses half-hourly 311 call volumes published by Halifax Regional Municipality (HRM). Every Monday, each run forecasts the week beginning seven days later. Erlang A converts forecast volume and service time into the net agents required in each half-hour. That requirement is compared with the requirement calculated from actual calls.
+**Main results**
 
-The test covers 52 weeks, from September 2025 through August 2026.
+- Accuracy (WAPE) and staffing error rank the models almost the same way.
+- Models with the same error can still differ in risk. A forecast that runs low leaves the queue short more often.
+- When being short costs more than being overstaffed, adjusting the forecast based on its past errors reduces cost more than switching models.
+- For capacity plans 13 and 26 weeks ahead, the differences between models are small after this adjustment.
+
+Before modelling, the published data was repaired: one year was largely counted twice, and later timestamps were four hours off.
 
 ## Terms used in this report
 
-- **WAPE:** Total absolute forecast error divided by the total number of actual calls.
-- **Net staffing requirement:** The productive agents needed in the queue before shrinkage and schedule constraints.
-- **Staffing error:** The absolute difference between the net agent-hours required from forecast and actual volume, measured per week. One agent required for one half-hour equals 0.5 agent-hours.
-- **Cost ratio (`r`):** The relative cost of being short one agent-hour compared with having one spare agent-hour. At `r = 1`, both have the same cost.
-- **Primary and secondary runs:** Primary runs use data from after the July 2024 platform change. Secondary runs use the full series going back to 2017.
-- **Scenarios:** Sensitivity tests that change one staffing assumption at a time, including the service target, caller patience, handling time, and using Erlang C instead of Erlang A.
+- **WAPE:** Total forecast error divided by total actual calls. Lower is better.
+- **Net staffing requirement:** The number of agents needed on the queue, before breaks, absence and shift rules (shrinkage).
+- **Staffing error:** How far the agents needed by the forecast are from the agents needed by actual calls, in agent-hours per week. One agent for one half-hour is 0.5 agent-hours.
+- **Cost ratio (`r`):** How much more one short agent-hour costs than one spare agent-hour. At `r = 1`, both cost the same.
+- **Primary and secondary runs:** Primary runs train only on data after the July 2024 platform change. Secondary runs train on the full history back to 2017.
+- **Scenarios:** Repeat runs that change one staffing assumption at a time: the service target, caller patience, handling time, or Erlang C instead of Erlang A.
 
 ## Main findings
 
 ### 1. The published data overstated one year of call volume
 
-For one year, the published data overstated demand by about 61%. From May 2023 to July 2024, most days were counted twice. Starting in July 2024, timestamps also carry a fixed UTC+4 offset. HRM's documentation does not explain either issue.
+From May 2023 to July 2024, most days were counted twice, which overstated that year by about 61%. From July 2024, timestamps are also four hours off (a fixed UTC+4 offset). HRM's documentation does not mention either issue.
 
-Both issues were corrected before training or evaluation. The evidence and repair process are described in the [Data](#data) section.
+Both were fixed before any training or testing. The [Data](#data) section shows the evidence.
 
 ![Daily calls reaching the agent queue, as published and repaired](results/figures/repair.png)
 
-### 2. With equal costs, WAPE and net staffing error give almost the same ranking
+### 2. When costs are equal, accuracy and staffing error agree
 
-When staffing is based directly on point forecasts and understaffing and overstaffing have equal costs, the WAPE ranking closely matches the ranking by staffing error. Across all six staffing scenarios, the rank correlation is between 0.95 and 1.00.
+If being short and being overstaffed cost the same, WAPE and staffing error rank the models almost identically. Across six scenarios, the rank correlation is 0.97 to 1.00.
 
-XGBoost (secondary) has the lowest net staffing error. Its bootstrap interval separates it from every non-XGBoost run, but not from XGBoost (primary), based on paired weekly differences and a moving-block bootstrap with four-week blocks.
+XGBoost (secondary) has the lowest staffing error. It is clearly better than every non-XGBoost run, but not clearly better than XGBoost (primary).
 
-Sampling variation limits the accuracy any model can reach. A simulation using each observed interval count as its Poisson rate produces an estimated WAPE of 13.4% and a net staffing error of 44 agent-hours per week. The lowest-error run reaches 19.3% WAPE and 63 agent-hours of weekly staffing error. This is an optimistic lower bound because actual arrivals are more variable than a Poisson process.
+Some error cannot be removed, because calls arrive randomly. A Poisson simulation puts this floor at 13.4% WAPE and 44 agent-hours per week. The best run reaches 19.3% WAPE and 63 agent-hours. The real floor is likely higher, because actual calls vary more than a Poisson process.
 
 ![WAPE against agent-hours error](results/figures/accuracy_staffing.png)
 
-### 3. Forecast bias matters when understaffing is more expensive
+### 3. When shortages cost more, the direction of the error matters
 
-WAPE measures the size of forecast errors, but it does not show whether a model tends to predict too many or too few calls. That distinction becomes important when understaffing costs more than overstaffing.
+WAPE shows how big the error is, not whether the forecast is too high or too low. When being short is expensive, a forecast that runs low is the bigger risk.
 
-Chronos-2 and the secondary Prophet model have the same weekly staffing error, but Chronos-2 under-forecasts demand by 4.4%. It leaves 37% of intervals understaffed, compared with 29% for Prophet. Under Erlang A, its net staffing requirement gives a modelled service level of 78.4%, below the 80% target.
+Chronos-2 and Prophet (secondary) have the same weekly staffing error. But Chronos-2 forecasts 4.4% too low. It leaves 37% of half-hours understaffed, against 29% for Prophet. Its modelled service level is 78.4%, below the 80% target. The same average error hides a different risk.
 
-When the cost of understaffing is set to 16 times the cost of having spare capacity, Chronos-2 drops from third place to seventh when staffing is based on its point forecast.
+When one short agent-hour costs 16 times a spare one, Chronos-2 falls from third place to eighth of nine.
 
-The univariate Chronos-2 run over-forecasts November by 23% and under-forecasts January by 21%. It uses 24 weeks of the target series and no calendar or holiday covariates. Seasonal Naive, MSTL and Prophet (primary) show the same swing; none has an annual signal. Both XGBoost runs, which use a 52-week lag, and Prophet (secondary), with yearly seasonality, keep November and January within about 11%. The Prophet runs also use different training windows, so their gap does not isolate either change.
+Chronos-2 forecasts November 23% too high and January 21% too low. It only sees the last 24 weeks of history. Adding calendar features reduces its overall bias to −2.5%, but not this November–January swing. Seasonal Naive, MSTL and Prophet (primary) show a similar swing. XGBoost (which looks at the same week last year) and Prophet (secondary, with a yearly pattern) stay within about 11% in those months. The two Prophet runs also use different training windows, so this comparison cannot say which change helped.
 
 ![Monthly bias by model](results/figures/bias_by_month.png)
 
-### 4. A calibrated forecast uplift can matter as much as model choice
+### 4. Adjusting the forecast for cost helps more than changing the model
 
-When understaffing is more costly, each point forecast is multiplied by an uplift calibrated on 26 training weeks. The uplift is the `q`-quantile of actual divided by forecast volume, where `q = r / (1 + r)` and `r` is the cost ratio.
+Every model produces one forecast per half-hour. For Chronos-2, this is its median (50th percentile).
 
-When one short agent-hour costs four times as much as one spare agent-hour, the uplift reduces the modelled penalty by 15% to 31%, depending on the run. The lowest weekly penalty falls from 153 to 119 spare-agent-hour equivalents. Among non-naive runs using an uplift, the difference between the lowest and highest penalty is still 23%.
+To adjust it, each model first makes 26 weekly forecasts inside the training period, each using only data available at the time. For every open half-hour, actual calls are divided by forecast calls. This shows how the model usually misses.
 
-At a cost ratio of eight, the uplift reduces the penalty by 35% to 51%, while model choice still accounts for a difference of about 26%. Each run uses its own calibration errors, so the uplift also adjusts systematic bias. Chronos-2 benefits the most. Separate uplifts for weekday or weekend peak and off-peak slots improve the result by less than 1%.
+The cost ratio `r` decides how cautious to be. HRM does not publish its costs, so ratios from 0.25 to 16 are tested. The target is the quantile `q = r / (1 + r)`: `r = 4` gives `q = 0.80`, and `r = 8` gives `q = 0.89`.
+
+For each model and ratio, the `q`-quantile of those past ratios becomes one multiplier. The forecast is multiplied by it, and staffing is scored on the separate test year. The model is not retrained, and test data is never used to set the multiplier.
+
+When one short agent-hour costs four times a spare one, this adjustment cuts the cost by 15% to 31%, depending on the run. The lowest weekly cost falls from 153 to 119 (in spare agent-hours). Model choice still matters: among the adjusted non-naive runs, the highest cost is 23% above the lowest.
+
+At a ratio of eight, the adjustment cuts cost by 35% to 51%, and model choice still makes a difference of about 26%. Each run is adjusted using its own past errors, so the adjustment also corrects a model that runs low or high. Chronos-2 gains the most. Using separate multipliers for weekday, weekend, peak and off-peak slots improves results by less than 1%.
 
 ![Weekly cost by cost ratio](results/figures/buffer.png)
 
-These findings come from one test year, one aggregate queue, a one-week forecast lead time, and a linear penalty. Results may differ for smaller queues or runs with stronger bias. Across the full test year, the 80th-percentile uplift covers 76% to 82% of actual volume. From January to March, coverage falls to 51% to 81%. The calibration targets cover March through August, with no January or February demand.
+These results come from one test year, one queue, a one-week lead and a simple linear cost. They may differ for other queues, lead times, years or cost rules. The 80th-percentile adjustment covers 75% to 82% of open half-hours overall, but only 51% to 81% from January to March. The calibration weeks run from March to August, so they contain no January or February demand.
+
+### 5. For capacity plans, the adjustment matters more than the model
+
+For capacity planning, models forecast weekly volume 13 and 26 weeks ahead. Volume is turned into FTE using 237 seconds per call, 85% occupancy, 32.5% shrinkage and 37.5 paid hours per week. HRM does not publish these values. They change all estimates by the same factor, so rankings stay the same. Average weekly volume needs about 14.4 FTE at 237 seconds per call, or 21.5 at 353 seconds. This leaves out safety staffing within the day and shift inefficiency, so it is not a headcount plan ([Koole, 2022](https://doi.org/10.1287/stsy.2021.0008)).
+
+Weekly WAPE is 9% to 12% at both leads. Simply using the same week last year comes within about two points of the best model.
+
+At a cost ratio of eight and a 13-week lead, the adjustment cuts weekly cost by 37% to 47%. After it, the runs differ by less than one FTE per week. See [capacity.md](results/capacity.md).
 
 ## Results
 
 | Run | WAPE | Bias | Net staffing error (agent-hours/week) | Difference from lowest | Understaffed intervals | Modelled service level |
 |---|---:|---:|---:|---:|---:|---:|
-| XGBoost (secondary) | 19.3% | −0.0% | 62.6 | lowest | 29.6% | 80.6% |
-| XGBoost (primary) | 19.8% | +1.5% | 64.5 | +1.8 (−0.2 to +4.3) | 27.9% | 81.5% |
-| Prophet (secondary) | 21.3% | +0.9% | 70.2 | +7.6 (+4.3 to +12.6) | 28.6% | 80.3% |
+| XGBoost (secondary) | 19.3% | −0.0% | 62.6 | lowest | 29.5% | 80.6% |
+| XGBoost (primary) | 19.8% | +1.5% | 64.5 | +1.9 (−0.0 to +4.1) | 27.9% | 81.5% |
+| Prophet (secondary) | 21.4% | +0.8% | 70.2 | +7.6 (+4.4 to +12.7) | 28.8% | 80.2% |
 | Chronos-2, zero-shot | 21.5% | −4.4% | 70.2 | +7.5 (+3.6 to +14.0) | 37.1% | 78.4% |
-| MSTL (primary) | 21.8% | −0.0% | 71.4 | +8.8 (+5.4 to +14.6) | 32.3% | 80.2% |
-| MSTL (secondary) | 21.8% | −0.1% | 71.7 | +9.0 (+5.7 to +14.8) | 32.6% | 80.2% |
-| Prophet (primary) | 23.5% | −1.0% | 77.5 | +14.8 (+8.3 to +24.2) | 32.9% | 79.1% |
-| Seasonal Naive | 26.1% | +0.5% | 85.5 | +22.8 (+19.3 to +28.0) | 34.8% | 79.5% |
+| Chronos-2 with calendar, zero-shot | 21.7% | −2.5% | 70.4 | +7.8 (+4.2 to +14.0) | 35.0% | 79.2% |
+| MSTL (primary) | 21.8% | −0.0% | 71.4 | +8.8 (+5.4 to +14.5) | 32.3% | 80.2% |
+| MSTL (secondary) | 21.8% | −0.1% | 71.7 | +9.1 (+5.6 to +14.7) | 32.6% | 80.2% |
+| Prophet (primary) | 23.5% | −1.0% | 77.5 | +14.8 (+8.5 to +24.2) | 32.9% | 79.1% |
+| Seasonal Naive | 26.1% | +0.5% | 85.5 | +22.9 (+19.2 to +28.1) | 34.8% | 79.5% |
 | Poisson noise floor | 13.4% | | 44.2 | | | |
 
-The table converts each point forecast directly into a net staffing requirement under the primary scenario and includes open intervals only. “Difference from lowest” is the mean weekly difference in staffing error, with a 95% moving-block bootstrap interval. An interval containing zero does not separate the runs. The reference run is selected on the same test year, and the seven intervals are not corrected for multiple comparisons. Modelled service level is the share of actual calls that Erlang A estimates would be answered within 25 seconds; it is not an observed service level.
+All rows use each model's own forecast, unadjusted, on open half-hours. "Difference from lowest" is the average weekly gap to XGBoost (secondary), with a 95% block-bootstrap interval. If the interval includes zero, the two runs cannot be told apart. The intervals are not corrected for multiple comparisons. Modelled service level is calculated, not measured.
 
-A warmed-up Chronos-2 forecast takes about 0.3 seconds to run. XGBoost takes 1 to 2.5 seconds, while MSTL and Prophet take 15 to 90 seconds. At this scale, runtime does not determine which model is preferable.
+Once loaded, Chronos-2 takes about 0.3 seconds per forecast. XGBoost takes 1 to 2.5 seconds, and MSTL and Prophet take 15 to 90 seconds. At this scale, speed is not a reason to choose one model over another.
 
-The figure below shows a test week whose XGBoost WAPE is the median among the test weeks.
+The figure below shows a typical test week: the one with the median XGBoost WAPE.
 
 ![One test week, actual against two forecasts](results/figures/week.png)
 
-For accuracy at peak, off-peak, and after closures, along with runtime, see [baselines.md](results/baselines.md). The [decision analysis](results/decision.md) includes bootstrap intervals, the cost-ratio comparison, uplift calibration, and scenario results.
+[baselines.md](results/baselines.md) has accuracy at peak, off-peak and after closures, plus run times. [decision.md](results/decision.md) has the bootstrap intervals, the cost-ratio comparison, the adjustment checks and the scenario results.
 
 ## Data
 
-The project uses HRM's [311 Call Volumes](https://data-hrm.hub.arcgis.com/datasets/HRM::311-call-volumes) data under its [Open Data Licence](https://data-hrm.hub.arcgis.com/pages/open-data-licence). The service contains half-hourly records dating back to 2017. The snapshot used for the reported results is committed at `data/raw/call_volumes_2026-09-13.parquet`; `pull_metadata.json` records its source, extraction time and SHA-256 hash.
+The data is HRM's [311 Call Volumes](https://data-hrm.hub.arcgis.com/datasets/HRM::311-call-volumes) dataset, used under its [Open Data Licence](https://data-hrm.hub.arcgis.com/pages/open-data-licence). It has half-hourly records back to 2017. The exact snapshot used here is committed at `data/raw/call_volumes_2026-09-13.parquet`, and `pull_metadata.json` records its source, download time and SHA-256 hash.
 
-The forecast target is calls that reached the agent queue, calculated as `HANDLED + ABANDONED` in each half-hour. `OFFERED` also includes calls that ended in the interactive voice response system (IVR), making it about 48% higher. The centre is treated as open from 08:00 to 20:00 on weekdays and from 09:00 to 17:30 on weekends, with statutory holidays closed. Only open intervals are evaluated and converted to net staffing requirements.
+The forecast target is calls that reached the agent queue: `HANDLED + ABANDONED` in each half-hour. `OFFERED` is about 48% higher, because it also counts calls that ended in the automated phone menu (IVR). The centre is treated as open 08:00–20:00 on weekdays and 09:00–17:30 on weekends, and closed on statutory holidays. Only open half-hours are scored and staffed.
 
 ### Data issues and corrections
 
 | Issue | What the data shows | Evidence | Correction |
 |---|---|---|---|
-| Fixed UTC+4 timestamps from 2024-07-17 | Weekday peaks shift to late afternoon, and Saturday at 01:00 contains calls from Friday evening | Interpreting timestamps as UTC+4 produces a profile that matches the pre-2023 profile with a correlation of 0.9997. Shifts of ±30 minutes produce correlations of 0.96–0.97. | Convert timestamps to Halifax local time. |
-| Duplicate daily counts from 2023-05-23 to 2024-07-16 | Agent-queue volume doubles overnight, then falls by half about fourteen months later | On 395 of 407 days, every published count is even. For each of those days, published calls are 2.00 to 2.03 times the number of distinct call IDs in HRM's per-call data. | Halve counts on the affected days. Repaired totals are within 1.3% of distinct call IDs on every corrected day, and match exactly on 379 of the 395 days. See [duplicate_check.csv](results/duplicate_check.csv). |
+| Fixed UTC+4 timestamps from 2024-07-17 | Weekday peaks move to late afternoon, and Saturday 01:00 holds Friday-evening calls | Reading timestamps as UTC+4 gives a daily profile that matches the pre-2023 one with a correlation of 0.9997. Shifting by 30 minutes either way gives only 0.96–0.97. | Convert timestamps to Halifax local time. |
+| Duplicate daily counts from 2023-05-23 to 2024-07-16 | Queue volume doubles overnight, then halves about fourteen months later | On 395 of 407 days, every published count is even. On each of those days, published calls are 2.00 to 2.03 times the number of distinct call IDs in HRM's per-call data. | Halve counts on the affected days. Repaired totals are within 1.3% of distinct call IDs on every corrected day, and match exactly on 379 of the 395. See [duplicate_check.csv](results/duplicate_check.csv). |
 
-The repaired FY2023/24 volume is within 5% of HRM's published figure. The full evidence is in [data_audit.md](data/raw/data_audit.md).
+After repair, FY2023/24 volume is within 5% of HRM's published figure. [data_audit.md](data/raw/data_audit.md) has the full evidence.
 
-The 17 July 2024 date also marks a platform change, after which the abandonment rate is lower. For that reason, the project compares two training windows:
+17 July 2024 is also when the phone platform changed, and abandonment is lower after it. So the project trains on two windows:
 
 | Window | Dates |
 |---|---|
@@ -112,50 +132,65 @@ The 17 July 2024 date also marks a platform change, after which the abandonment 
 
 ### Forecasting models
 
-The five model families cover a last-week baseline, statistical models, gradient-boosted trees, and a pretrained time-series model:
+The models range from a simple baseline to a pretrained foundation model:
 
-- **Seasonal Naive** repeats the last observed week.
-- **MSTL** and **Prophet** model trend and recurring daily, weekly, or yearly patterns.
-- **XGBoost** uses gradient-boosted trees with calendar and lagged-demand features.
-- **Chronos-2** is a pretrained time-series model evaluated without training on this call-volume series.
+- **Seasonal Naive** repeats the last week.
+- **MSTL** and **Prophet** model trend plus daily, weekly or yearly patterns.
+- **XGBoost** uses boosted trees with calendar features and past demand.
+- **Chronos-2** is a pretrained time-series model, used as is, without training on this data.
 
-XGBoost predicts each half-hour using calendar information and demand from the same slot two to five weeks earlier and 52 weeks earlier. To avoid using information that would not have been available when a schedule was made, no lag is shorter than the 14 days between the forecast origin and the end of the target week.
+SARIMA and Holt-Winters are not included. Chronos-2 was chosen because it is pretrained, accepts calendar features, returns quantiles and runs on a CPU. Its weights are Apache-2.0. Its median forecast is used as the point forecast; its other quantiles are not compared.
 
-Chronos-2 makes univariate zero-shot forecasts from the target series using the most recent 24 weeks, which is its maximum context window. It receives no calendar or holiday covariates. Closed days in the historical data are replaced with the most recent open day of the same weekday. No model settings are tuned using the test period.
+XGBoost uses calendar features and demand in the same slot 2–5 and 52 weeks earlier. No input is newer than the forecast start, which is 14 days before the end of the target week.
 
-### Turning forecasts into net staffing requirements
+Chronos-2 sees the latest 24 weeks. One run uses demand only; the other adds the same calendar features as XGBoost. Closed days in its history are filled with the latest open day of the same weekday. No model is tuned on test data.
 
-For each open half-hour, forecast volume and the service assumptions are converted into an integer net staffing requirement. Staffing error is the absolute difference from the requirement calculated with actual volume, expressed in agent-hours.
+Each forecast is made on Monday at 00:00, using data up to Sunday 23:30. It covers the full week that starts seven days later, which gives schedulers one week to publish rosters.
 
-The cost model is:
+| Model | Inputs |
+|---|---|
+| Seasonal Naive | The last 336 half-hours |
+| MSTL | Past demand; daily and weekly patterns |
+| Prophet | Past demand; weekly pattern, separate weekday and weekend daily shapes; yearly pattern in the secondary run |
+| XGBoost | Half-hour slot, day of week, month; same-slot demand 2–5 and 52 weeks earlier |
+| Chronos-2 | The last 24 weeks of past demand |
+| Chronos-2 (calendar) | As Chronos-2, plus slot, day of week and month for the forecast week |
+
+In the one-week benchmark, models are not told about special days. The special-day list is only used to replace closed and outage days in the training history, and closed half-hours are not scored. So models do not know about holidays, storms or the busy days after a closure. In the capacity benchmark, Prophet, XGBoost and calendar Chronos-2 are given the known number of closed days in each target week; the other runs are not. [baselines.md](results/baselines.md) has the post-closure results.
+
+### From forecast to staffing
+
+For each open half-hour, Erlang A turns forecast volume and the service assumptions into a whole number of agents. Staffing error is the gap between that number and the number based on actual volume, in agent-hours.
+
+The cost is:
 
 `cost = r × shortfall + excess staffing`
 
-The cost ratio `r` is tested from 0.25 to 16. Before building the models, a preliminary staffing test found that a forecast with 10% WAPE changes the required staffing level in 39% of open half-hours. Details are in [staffing_probe.md](results/staffing_probe.md).
+with `r` from 0.25 to 16. A synthetic test shows how sensitive this is: random errors at 10% WAPE changed the agent count in 38% to 40% of half-hours. This checks the staffing calculation, not the forecasts. See [staffing_probe.md](results/staffing_probe.md).
 
 ### Assumptions and limitations
 
-HRM publishes call counts, not staff rosters. The analysis therefore estimates net staffing requirements, not HRM's actual staffing or costs. It does not apply shrinkage or convert interval requirements into feasible shifts, schedules, headcount, or full-time equivalents.
+HRM publishes call counts, not rosters. This project estimates staffing and cost; it does not reproduce what HRM actually scheduled. The one-week analysis leaves out shrinkage, shifts and roster rules. The capacity analysis converts volume to FTE but does not model hiring, attrition or training time.
 
 The queueing and service assumptions are:
 
-- **Erlang A, with Erlang C as a comparison.** The dataset records abandoned calls, while Erlang C assumes no callers abandon the queue.
-- **Service target:** 80% of calls answered within 25 seconds, based on HRM documents from 2010 to 2014. A 75%-within-25-seconds target, used in documents from 2017 to 2019, is also tested. No more recent target was found in the published material.
-- **Service time:** 237 seconds, the mean talk time in the primary training period. The analysis also tests 360 seconds. It is unclear whether hold time and after-call work are included, so 237 seconds may understate total handling time.
-- **Caller patience:** 120 seconds, tested over a range from 60 to 300 seconds. The available data does not include waiting times, so patience cannot be estimated directly.
-- **Half-hourly steady-state assumption:** Each half-hour is sized independently, assuming Poisson arrivals. Actual demand varies more than this assumption allows. Demand for the same slot in adjacent weeks varies about 1.9 times as much as a Poisson process would suggest, meaning the real noise floor is likely higher than the simulated estimate. The data also cannot show surges within a half-hour, so modelled service levels are likely higher than the service levels a real contact centre would record.
+- **Erlang A, with Erlang C as a check.** Erlang A allows callers to hang up; Erlang C does not. Both assume random (Poisson) arrivals, exponential call times and a steady state within each half-hour. Erlang A also assumes exponential patience. Abandoned calls count as missing the service target.
+- **Service target:** 80% of calls answered within 25 seconds, from HRM documents of 2010–2014. 75% within 25 seconds, from 2017–2019 documents, is also tested. No newer target was found.
+- **Service time:** 237 seconds, the average talk time in the primary training window. HRM defines talk time as time spent speaking with an agent. Full call duration, including queue and wrap-up, averages 353 seconds; 360 seconds is also tested.
+- **Caller patience:** 120 seconds, tested from 60 to 300 seconds. The data has no waiting times, so patience cannot be measured.
+- **Each half-hour on its own:** Every half-hour is staffed independently. Demand in the same slot varies about 1.9 times more from week to week than a Poisson process predicts, so the simulated noise floor is too low. Half-hourly data also hides short surges, so modelled service levels may be too high.
 
 ## Chronos-2 pretraining overlap
 
-Chronos-2 was released in October 2025. Halifax 311 is not listed in its published training data, and most test weeks occur after its release. The series is public, so its absence from the published description cannot rule out overlap. The other models use only the training windows described above.
+Chronos-2 was released in October 2025. Halifax 311 is not listed in its published training data, and most test weeks come after its release. But the series is public, so overlap cannot be fully ruled out. The other models only see the training windows above.
 
 ## Related work
 
-Bastianin, Galeotti, and Manera (2019) evaluate daily call-arrival forecasts using statistical accuracy and the cost of Erlang C staffing at an 80/20 service target. The measures select the same leading models, although the full rankings differ.
+Bastianin, Galeotti and Manera (2019) compare daily call-arrival forecasts on both accuracy and the cost of Erlang C staffing at an 80/20 target. Both measures pick the same leading models, though the full rankings differ.
 
-Ding and Koole (2022) show that, under their cost model, optimal staffing can be expressed as a forecast quantile. They also find that staffing cost is close to linear in absolute forecast error, supporting the use of WAPE when overstaffing and understaffing have equal costs.
+Ding and Koole (2022) study staffing in two stages, with changes during the day. Under their cost model, the best initial staffing level is a quantile of the forecast, not its mean. They also find that staffing cost grows roughly in line with forecast error ([paper](https://doi.org/10.1017/S0269964820000595)).
 
-This project applies the same forecast-to-staffing question to half-hourly volume at a one-week scheduling horizon. It uses Erlang A and compares statistical models, gradient-boosted trees, and a pretrained time-series model.
+This project tests a simpler, data-based version of that idea (adjusting forecasts by their past errors) against half-hourly staffing cost. It does not implement their two-stage model.
 
 ## Running the project
 
@@ -169,10 +204,11 @@ uv run python -m src.probe      # Create results/staffing_probe.md
 uv run python -m src.evaluate   # Backtest all models, about 4 hours on an Apple M2
 uv run python -m src.decide     # Calculate net staffing and penalties, about 1.5 hours on first run
 uv run python -m src.report     # Generate figures in results/figures/
+uv run python -m src.capacity   # Create results/capacity.md, about 15 minutes
 uv run pytest                   # Add -m 'not network' to skip the Chronos-2 download
 ```
 
-The commands above use the committed snapshot. Run `uv run python -m src.ingest` to download a current dated snapshot; subsequent cleaning uses the latest snapshot in `data/raw/`. Processed data and intermediate forecasts are not committed. `uv.lock` pins every package, and `src/baselines.py` pins the Chronos-2 model revision.
+These commands use the committed snapshot. To download a fresh one, run `uv run python -m src.ingest`; cleaning then uses the newest snapshot in `data/raw/`. Processed data and intermediate forecasts are not committed. `uv.lock` pins every package, and `src/baselines.py` pins the Chronos-2 model version.
 
 ## Repository structure
 

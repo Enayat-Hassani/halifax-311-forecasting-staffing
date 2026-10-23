@@ -1,8 +1,16 @@
 # Data audit
 
-What the frozen snapshot contains and which source behaviours affect cleaning. Figures come
-from `call_volumes_2026-09-13.parquet`, on local time after the repair in `src/clean.py`,
-unless stated.
+This file records what is in the data snapshot and which problems in the source affect
+cleaning. Figures come from `call_volumes_2026-09-13.parquet`, in Halifax local time, after
+the repair in `src/clean.py`, unless stated otherwise.
+
+In short:
+
+- From 17 July 2024, every timestamp is four hours off (a fixed UTC+4 offset).
+- From 23 May 2023 to 16 July 2024, most days are counted twice.
+- `OFFERED` also counts calls that ended in the phone menu. Agent demand is
+  `HANDLED + ABANDONED`.
+- Talk time is not full handle time. Handle time is between 237 s and 353 s.
 
 Service:
 `https://services2.arcgis.com/11XBiaBYA9Ep0yNJ/arcgis/rest/services/311_Call_Volumes/FeatureServer/0`
@@ -18,46 +26,47 @@ Fields: `CALL_DATE`, `MILITARY_HOUR`, `INTERVAL`, `OFFERED`, `HANDLED`, `ABANDON
 `MILITARY_HOUR` and `INTERVAL` agree on every row, so the grain is 30 minutes across a
 48-slot day. `CALL_DATE` is midnight US Pacific in epoch milliseconds.
 
-Intervals with no calls are usually not written. Absence tracks quiet hours, and the
-publisher also writes 477 explicit zero rows, so absent intervals are read as zero. Inside
+Half-hours with no calls are usually left out of the table. They are missing mostly in
+quiet hours, and the table also has 477 rows with an explicit zero, so missing half-hours
+are read as zero. Inside
 opening hours in the test window, 0.01% of intervals are absent.
 
-Absence is not proof of zero demand. A run of three or more absent open intervals occurs
-twice from 2017-07-03:
+But a missing row does not always mean no calls. Since 2017-07-03, three or more open
+half-hours in a row are missing on two days:
 
 | Date | Absent | Reading |
 |---|---|---|
 | 2019-05-26 | Whole day, 17 intervals | Outage |
 | 2024-02-06 | 08:30–11:30, 7 intervals | Outage. Demand returns at 12:00 with 6 calls, then at the usual level. A normal Tuesday morning has 32–45 calls per interval. |
 
-Both are listed as `outage` in `data/special_days.csv`, so training history replaces them.
+Both are listed as `outage` in `data/special_days.csv`, and are replaced in the training history.
 Neither is in the primary or test window.
 
-Christmas Eve has had no agent calls after about 14:00 since 2020. Those intervals are
-written as zero and are not a data gap. The opening-hours rule does not model the early
-close, so the test scores 11 such intervals on 2025-12-24, from 14:30. They add about 0.1 percentage
+Since 2020, Christmas Eve has no agent calls after about 14:00. These half-hours are
+real zeros, not missing data. The opening-hours rule does not include this early close, so
+the test scores 11 of them on 2025-12-24, from 14:30. They add about 0.1 percentage
 points of WAPE to every run and do not change the ranking.
 
 ## Time-base break, 2024-07-17
 
-From the row labelled 2024-07-17 00:00, every label is a fixed UTC+4 timestamp: 7 hours
-ahead of Halifax in summer and 8 in winter. The date moves with the hour. Post-break rows
-labelled 00:00–02:30 carry Friday-evening volume on Saturdays and almost none on Sundays
-and Mondays.
+From the row labelled 2024-07-17 00:00, every timestamp is in fixed UTC+4: 7 hours ahead
+of Halifax in summer and 8 in winter. The date moves with the hour. So after this date,
+Saturday 00:00–02:30 holds Friday-evening calls, and Sunday and Monday at that time hold
+almost none.
 
-Read as UTC+4 and converted to `America/Halifax`, the weekday profile matches the
-pre-2023 profile at correlation 0.9997, against 0.96–0.97 at ±30 minutes. A per-row hour
-shift that keeps the date does not fit.
+When the timestamps are read as UTC+4 and converted to Halifax time, the weekday profile
+matches the pre-2023 profile with a correlation of 0.9997. Shifting by 30 minutes either
+way gives only 0.96–0.97. Shifting the hour while keeping the date does not fit.
 
 HRM documents the migration from Telus Elements to an Enghouse-hosted cloud service (CAO
 contract amendment, 2024-04-05) and the Enghouse Cloud launch in July 2024. HRM has
-published nothing about the timestamp defect, so its cause is an inference.
+published nothing about the timestamp problem, so its cause is a guess.
 
 ## Duplicate counts, 2023-05-23 → 2024-07-16
 
-On 395 of the 407 days with calls in this period, the table counts every handled and
-abandoned call twice. Talk time is doubled with them, and `OFFERED` includes the second
-copy. `PROCESSED_IN_IVR` is not doubled.
+On 395 of the 407 days with calls in this period, every handled and abandoned call is
+counted twice. Talk time is doubled too, and `OFFERED` includes the extra copy.
+`PROCESSED_IN_IVR` is not doubled.
 
 HRM's 311 Call Details service holds one row per call:
 `https://services2.arcgis.com/11XBiaBYA9Ep0yNJ/arcgis/rest/services/311_Call_Details/FeatureServer/0`
@@ -69,8 +78,8 @@ HRM's 311 Call Details service holds one row per call:
   doubled. 2023-05-23 is the first open day after a closure; 2024-07-16 is the last day
   before the Enghouse cutover.
 
-`src/clean.py` uses that parity rule: inside the period, a day is halved when under a fifth
-of its non-zero handled and abandoned counts are odd. It halves handled, abandoned and talk
+`src/clean.py` uses this even-number rule: inside the period, a day is halved when fewer
+than one in five of its non-zero handled and abandoned counts are odd. It halves handled, abandoned and talk
 time, and removes the second copy from `OFFERED`. This takes out 281,543 agent calls. A
 stray odd interval on a doubled day becomes a half call. The snapshot is not changed.
 
@@ -97,8 +106,8 @@ the post-cutover time base differently.
 Weekday means per day, holidays excluded, over 2022-05 → 2023-04, 2023-06-12 → 2024-07-16
 and 2024-07-22 → 2025-07-21. IVR share is the monthly range.
 
-After the repair the level is continuous. Abandonment still falls at the 2024-07-17
-platform change, which may be a change in how abandons are counted.
+After the repair, call volume has no jump. Abandonment still drops at the 2024-07-17
+platform change. This may be a change in how abandoned calls are counted.
 
 HRM publishes 374,000 calls for FY2023/24. After the repair, `OFFERED` for that year is
 390,698, within 5%; FY2022/23 agrees within 3%.
@@ -116,17 +125,18 @@ and 2025. `data/special_days.csv` lists each closed day.
 
 ## The line runs 24 hours; agents do not
 
-`OFFERED` counts every call to the line and runs 47–49% above `HANDLED + ABANDONED` in
-training and test. The second counts the calls that reached or queued for an agent. The staffing model needs the second.
+`OFFERED` counts every call to the line, and is 47–49% higher than `HANDLED + ABANDONED`
+in training and test. `HANDLED + ABANDONED` counts the calls that reached or waited for an
+agent, which is what staffing needs.
 
-The three outcome fields are not a decomposition of `OFFERED`. On 10,419 rows
-`HANDLED + ABANDONED + PROCESSED_IN_IVR` exceeds `OFFERED`, so a call can pass the IVR and
-still reach an agent. A further 146,004 calls, 3.9% of offered, fall into none of the three.
-`OFFERED − PROCESSED_IN_IVR` is not a safe route to agent demand.
+The three outcome fields do not add up to `OFFERED`. On 10,419 rows
+`HANDLED + ABANDONED + PROCESSED_IN_IVR` is more than `OFFERED`, so a call can go through
+the phone menu and still reach an agent. A further 146,004 calls, 3.9% of offered, fall into none of the three.
+So `OFFERED − PROCESSED_IN_IVR` is not a safe way to get agent demand.
 
 ## Talk time and abandonment
 
-Mean talk time is `TOTAL_TALK_TIME` summed over `HANDLED` summed. It drifts: 182 s in 2017,
+Mean talk time is total `TOTAL_TALK_TIME` divided by total `HANDLED`. It changes over time: 182 s in 2017,
 288 s in 2023, 237 s in primary training (2024-07-17 → 2025-08-31) and 248 s in the test
 window. Averaging the `AVERAGE_TALK_TIME` column gives a lower figure, because the column is
 0 on the 55,247 rows where `HANDLED` is 0.
@@ -149,9 +159,9 @@ sample week (2025-03-03), the median of duration minus talk is 72 s in every hou
 quiet, so most of the gap does not grow with congestion. The 237 s from this table matches
 the per-call talk time. The "service 360 s" scenario covers the upper bound.
 
-Abandonment is 4.9% of agent demand in primary training and 5.8% in the test window. It is
-produced jointly by patience and congestion, and the table has no waiting times or staffing
-levels, so patience cannot be identified from it.
+Abandonment is 4.9% of agent demand in primary training and 5.8% in the test window. It
+depends on both caller patience and queue length. The table has no waiting times or
+staffing levels, so patience cannot be measured from it.
 
 ## Named days
 
@@ -160,7 +170,7 @@ Hurricane Dorian (2019-09-07/08), Hurricane Fiona (2022-09-24/25), the Tantallon
 February 2024 snowstorms (2024-02-03/04 and 2024-02-14), and Canada Day evenings in
 2017–2019, when calls offered spike after 21:00. No 2020 shock shows in agent demand.
 
-## Open
+## Open questions
 
 What `OFFERED` counts under HRM's configuration. Vendor conventions differ: Genesys
 documents flow-outs that break offered = answered + abandoned, Cisco can exclude short
