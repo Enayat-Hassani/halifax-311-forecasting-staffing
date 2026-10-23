@@ -1,8 +1,6 @@
-"""Seasonal Naive, MSTL, Prophet, XGBoost and Chronos-2 behind one interface.
+"""Forecast half-hourly demand with Seasonal Naive, MSTL, Prophet, XGBoost or Chronos-2.
 
-Each model fits on the history it is given and forecasts the `horizon` slots that follow
-it. Settings are fixed in advance; none is tuned on the test window. A model that reads
-only the latest slots of its history has a `context`, in slots.
+Model settings are fixed before the test. `context` limits how much history a model reads.
 """
 
 import multiprocessing
@@ -42,7 +40,7 @@ class SeasonalNaive:
 
 
 class MSTLModel:
-    """Daily and weekly seasons. One annual cycle in primary training is too few for a third."""
+    """Model daily and weekly patterns. Primary training has too little data for yearly seasonality."""
 
     name = "mstl"
 
@@ -82,7 +80,7 @@ class ProphetModel:
 
 
 class XGBoostModel:
-    """One direct model for every slot, on calendar and same-slot lags of 14 days or more."""
+    """Fit one model per slot with calendar features and lags of at least 14 days."""
 
     name = "xgboost"
 
@@ -103,27 +101,40 @@ class XGBoostModel:
 
 
 class Chronos2Model:
-    """Zero-shot Chronos-2 on the target alone. The point forecast is the median.
+    """Run zero-shot Chronos-2. Its point forecast is the median.
 
-    It runs in a worker process. On macOS, torch and xgboost load separate OpenMP
-    runtimes, and one process cannot hold both.
+    `calendar=True` adds calendar features as known covariates. A worker process keeps
+    PyTorch and XGBoost OpenMP runtimes separate on macOS.
     """
 
-    name = "chronos2"
     context = 8192
     _worker = None
+
+    def __init__(self, calendar: bool = False):
+        self.calendar = calendar
+        self.name = "chronos2_calendar" if calendar else "chronos2"
 
     def forecast(self, history: pd.Series, horizon: int) -> np.ndarray:
         if self._worker is None:
             self._worker = ProcessPoolExecutor(1, mp_context=multiprocessing.get_context("spawn"))
-        context = history.to_numpy(dtype=float)[-self.context :]
-        return self._worker.submit(_chronos_median, context, horizon).result()
+        history = history.iloc[-self.context :]
+        inputs = history.to_numpy(dtype=float)
+        if self.calendar:
+            future = pd.date_range(
+                history.index[-1] + pd.Timedelta(minutes=30), periods=horizon, freq="30min"
+            )
+            inputs = {
+                "target": inputs,
+                "past_covariates": _calendar(history.index),
+                "future_covariates": _calendar(future),
+            }
+        return self._worker.submit(_chronos_median, inputs, horizon).result()
 
 
 _pipeline = None
 
 
-def _chronos_median(context: np.ndarray, horizon: int) -> np.ndarray:
+def _chronos_median(inputs: np.ndarray | dict, horizon: int) -> np.ndarray:
     global _pipeline
     import torch
     from chronos import BaseChronosPipeline
@@ -136,26 +147,30 @@ def _chronos_median(context: np.ndarray, horizon: int) -> np.ndarray:
             torch_dtype=torch.float32,
         )
     quantiles, _ = _pipeline.predict_quantiles(
-        [context], prediction_length=horizon, quantile_levels=[0.5]
+        [inputs], prediction_length=horizon, quantile_levels=[0.5]
     )
     return quantiles[0].numpy().ravel()
 
 
 def lag_features(y: pd.Series, index: pd.DatetimeIndex) -> pd.DataFrame:
-    """Calendar and lag features for `index`, taken from `y` only.
+    """Return calendar and lag features for `index`; missing history stays missing.
 
-    Every lag is at least 14 days, so the features of a slot are known at any origin up to
-    14 days before it. Lags that fall outside `y` are missing.
+    Lags start at 14 days, so they are available at the forecast origin.
     """
-    features = pd.DataFrame(
-        {"slot": index.hour * 2 + index.minute // 30, "dow": index.dayofweek, "month": index.month},
-        index=index,
-    )
+    features = pd.DataFrame(_calendar(index), index=index)
     for k in LAG_WEEKS:
         features[f"lag_{k}w"] = y.reindex(index - pd.Timedelta(weeks=k)).to_numpy()
     features["lag_mean"] = features[[f"lag_{k}w" for k in LAG_WEEKS]].mean(axis=1)
     features["lag_52w"] = y.reindex(index - pd.Timedelta(weeks=52)).to_numpy()
     return features
+
+
+def _calendar(index: pd.DatetimeIndex) -> dict[str, np.ndarray]:
+    return {
+        "slot": (index.hour * 2 + index.minute // 30).to_numpy(),
+        "dow": index.dayofweek.to_numpy(),
+        "month": index.month.to_numpy(),
+    }
 
 
 def _frame(index: pd.DatetimeIndex, y: np.ndarray | None = None) -> pd.DataFrame:

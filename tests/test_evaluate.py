@@ -7,6 +7,7 @@ import pytest
 from src.baselines import WEEK
 from src.evaluate import (
     backtest,
+    breakdown,
     cleanse,
     origins,
     peak_keys,
@@ -129,3 +130,16 @@ def test_post_closure_skips_weekend_and_other_closures():
     got = post_closure_days(days)
     # Fri 26 closed, so Mon 29 follows the Christmas closures; Fri 2 follows Thu 1.
     assert list(got) == [pd.Timestamp("2025-12-29"), pd.Timestamp("2026-01-02")]
+
+
+def test_breakdown_bands_days_against_their_weekday():
+    ts = pd.date_range("2025-09-01", periods=20 * 7 * 48, freq="30min")
+    day = (ts.normalize() - ts[0]).days.to_numpy()
+    actual = np.where(ts.dayofweek < 5, 10.0, 2.0)  # weekends are quiet, not lulls
+    actual[day == 14] = 30.0  # one surge Monday
+    f = pd.DataFrame({"ts": ts, "actual": actual, "forecast": 10.0, "is_open": True})
+    got = breakdown(f).set_index(["by", "group"])
+    assert got.loc[("day", "surge"), "bias"] == pytest.approx((10 - 30) / 30)  # the surge Monday only
+    assert got.loc[("month", "2025-09"), "wape"] == pytest.approx(
+        np.abs(10.0 - actual[ts.month == 9]).sum() / actual[ts.month == 9].sum()
+    )

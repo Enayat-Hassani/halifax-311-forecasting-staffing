@@ -1,8 +1,4 @@
-"""Figures for the README, drawn from the snapshot, the series and the backtest files.
-
-Nothing is fitted here. Staffing reuses the primary scenario and the calibration of
-`src/decide.py`.
-"""
+"""Build README figures from the snapshot, cleaned series and backtest results."""
 
 from pathlib import Path
 
@@ -27,18 +23,21 @@ NAMES = {
     "xgboost_primary": "XGBoost (primary)",
     "xgboost_secondary": "XGBoost (secondary)",
     "chronos2_primary": "Chronos-2",
+    "chronos2_calendar_primary": "Chronos-2 (calendar)",
 }
 SHOWN = ("xgboost_secondary", "mstl_primary", "chronos2_primary")
 COLORS = {"xgboost_secondary": "#1f77b4", "mstl_primary": "#7f7f7f", "chronos2_primary": "#d62728"}
-# Label offsets in points: four runs sit within 1.5 agent-hours of each other, and
-# Seasonal Naive is at the right edge.
+# Separate nearby labels and keep Seasonal Naive inside the plot.
 OFFSETS = {
-    "mstl_primary": (6, -10),
-    "mstl_secondary": (6, 3),
+    "mstl_secondary": (40, 22),
+    "mstl_primary": (40, 9),
+    "chronos2_calendar_primary": (40, -4),
+    "chronos2_primary": (40, -17),
     "prophet_secondary": (-6, 3),
-    "chronos2_primary": (6, -10),
     "seasonal_naive_primary": (-6, -3),
 }
+# Runs bunched near 21-22% WAPE get labels stacked to the right with leader lines.
+LEADER = ("mstl_secondary", "mstl_primary", "chronos2_calendar_primary", "chronos2_primary")
 RIGHT_ALIGNED = ("prophet_secondary", "seasonal_naive_primary")
 
 
@@ -96,7 +95,9 @@ def accuracy_staffing(runs: dict[str, pd.DataFrame], test: pd.DataFrame, path: P
         error = 0.5 * np.abs(lookup(point) - lookup(actual)).sum() / WEEKS
         ax.scatter(wape, error, color=COLORS.get(file, "#444444"))
         ax.annotate(NAMES[file], (wape, error), fontsize=8, xytext=OFFSETS.get(file, (6, -3)),
-                    textcoords="offset points", ha="right" if file in RIGHT_ALIGNED else "left")
+                    textcoords="offset points", ha="right" if file in RIGHT_ALIGNED else "left",
+                    va="center" if file in LEADER else "baseline",
+                    arrowprops=dict(arrowstyle="-", color="#999999", lw=0.6) if file in LEADER else None)
     floor = poisson_floor(test)
     ax.scatter(floor["wape"], floor["short"] + floor["over"], marker="x", color="black")
     ax.annotate("Poisson floor: observed volume used as the rate",
@@ -127,7 +128,7 @@ def bias_by_month(runs: dict[str, pd.DataFrame], path: Path) -> None:
 
 
 def buffer(runs: dict[str, pd.DataFrame], calib: dict[str, pd.DataFrame], peak: set, path: Path) -> None:
-    """Weekly cost by cost ratio: range over the eight runs, point against uplift staffing."""
+    """Weekly cost by cost ratio: range over all runs, point against uplift staffing."""
     lookup = _lookup(PRIMARY)
     levels = RATIOS / (1 + RATIOS)
     cost = {"point": [], "uplift": []}
@@ -158,7 +159,7 @@ def buffer(runs: dict[str, pd.DataFrame], calib: dict[str, pd.DataFrame], peak: 
     ax.set_xlabel("Cost ratio r: one short agent-hour costs r spare agent-hours")
     ax.set_ylabel("Modelled weekly penalty, spare agent-hours")
     ax.set_title("Forecast uplift reduces penalty as understaffing cost rises")
-    ax.legend(loc="upper left", title="Line: lowest penalty. Band: range across 8 runs",
+    ax.legend(loc="upper left", title=f"Line: lowest penalty. Band: range across {len(runs)} runs",
               title_fontsize=8, fontsize=9)
     _save(fig, path)
 

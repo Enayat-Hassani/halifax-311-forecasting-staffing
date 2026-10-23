@@ -20,7 +20,23 @@ Fields: `CALL_DATE`, `MILITARY_HOUR`, `INTERVAL`, `OFFERED`, `HANDLED`, `ABANDON
 
 Intervals with no calls are usually not written. Absence tracks quiet hours, and the
 publisher also writes 477 explicit zero rows, so absent intervals are read as zero. Inside
-opening hours in the test window, 0.01% of intervals are absent. 2019-05-26 is an outage.
+opening hours in the test window, 0.01% of intervals are absent.
+
+Absence is not proof of zero demand. A run of three or more absent open intervals occurs
+twice from 2017-07-03:
+
+| Date | Absent | Reading |
+|---|---|---|
+| 2019-05-26 | Whole day, 17 intervals | Outage |
+| 2024-02-06 | 08:30–11:30, 7 intervals | Outage. Demand returns at 12:00 with 6 calls, then at the usual level. A normal Tuesday morning has 32–45 calls per interval. |
+
+Both are listed as `outage` in `data/special_days.csv`, so training history replaces them.
+Neither is in the primary or test window.
+
+Christmas Eve has had no agent calls after about 14:00 since 2020. Those intervals are
+written as zero and are not a data gap. The opening-hours rule does not model the early
+close, so the test scores 11 such intervals on 2025-12-24, from 14:30. They add about 0.1 percentage
+points of WAPE to every run and do not change the ranking.
 
 ## Time-base break, 2024-07-17
 
@@ -115,8 +131,23 @@ Mean talk time is `TOTAL_TALK_TIME` summed over `HANDLED` summed. It drifts: 182
 window. Averaging the `AVERAGE_TALK_TIME` column gives a lower figure, because the column is
 0 on the 55,247 rows where `HANDLED` is 0.
 
-This is talk time, not handle time. HRM publishes no field dictionary saying whether hold
-and after-call work are included, so talk time is a lower bound on service time.
+This is talk time, not handle time. HRM's metadata for this table defines it as "the total
+time in seconds the customer spoke with an Agent" (ODMT_311_Call_Volumes, 2018-10-31).
+
+The per-call 311 Call Details table also has `DURATION_IN_SECONDS`, defined as the time "from
+when the call is initiated, time in the queue, talking with an agent, and wrap up"
+(ODMT_311_Call_Details, 2023-11-27). Handled phone calls in primary training (263,428, email
+queue excluded):
+
+| Measure | Mean | Reading |
+|---|---:|---|
+| Talk time | 239 s | Lower bound on handle time |
+| Duration | 353 s | Upper bound: adds queue time and wrap-up to talk |
+
+Handle time is between the two. The table does not split queue time from wrap-up. On a
+sample week (2025-03-03), the median of duration minus talk is 72 s in every hour, busy or
+quiet, so most of the gap does not grow with congestion. The 237 s from this table matches
+the per-call talk time. The "service 360 s" scenario covers the upper bound.
 
 Abandonment is 4.9% of agent demand in primary training and 5.8% in the test window. It is
 produced jointly by patience and congestion, and the table has no waiting times or staffing
