@@ -1,0 +1,622 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A Halifax 311 study of how forecast model choice and cost-based calibration affect staffing cost and shortage risk.">
+  <title>Halifax 311 · Forecast to staffing</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --paper: #ffffff;
+      --panel: #f2f2f2;
+      --ink: rgba(0, 0, 0, 0.85);
+      --muted: rgba(0, 0, 0, 0.6);
+      --faint: rgba(0, 0, 0, 0.14);
+      --dot: #9a9a9a;
+      --accent: #2b3cff;
+      --accent-soft: rgba(43, 60, 255, 0.10);
+      --serif: "Inter Tight", -apple-system, sans-serif;
+      --mono: "JetBrains Mono", ui-monospace, monospace;
+      --sans: "Inter Tight", -apple-system, BlinkMacSystemFont, sans-serif;
+      --text: 680px;
+      --wide: 960px;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --paper: #0c0c0c;
+        --panel: #171717;
+        --ink: rgba(255, 255, 255, 0.88);
+        --muted: rgba(255, 255, 255, 0.6);
+        --faint: rgba(255, 255, 255, 0.16);
+        --dot: #666;
+        --accent: #8c97ff;
+        --accent-soft: rgba(140, 151, 255, 0.16);
+      }
+    }
+
+    * { box-sizing: border-box; }
+
+    html { background: var(--paper); }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font: 17px/1.6 var(--serif);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: inherit; text-decoration-color: var(--faint); text-underline-offset: 3px; }
+    a:hover { text-decoration-color: currentColor; }
+
+    button, input { font: inherit; color: inherit; }
+
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+    .skip { position: fixed; top: 12px; left: 12px; z-index: 10; padding: 8px 12px; color: var(--paper); background: var(--ink); transform: translateY(-200%); }
+    .skip:focus { transform: none; }
+
+    .col, .wide { width: min(calc(100% - 32px), var(--text)); margin-inline: auto; }
+    .wide { width: min(calc(100% - 32px), var(--wide)); }
+
+    .label, .topbar, figcaption, .note, .controls, .ranking, .model-detail, .proof-value span, .proof-value small, .proof-change span, .risk-row, .risk-scale, .byline {
+      font-family: var(--sans);
+    }
+
+    .label, .topbar, .risk-scale { font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.04em; }
+    .label {
+      color: var(--muted);
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    /* Top bar */
+    .topbar { border-bottom: 1px solid var(--faint); font-size: 0.72rem; }
+    .topbar a { white-space: nowrap; }
+    .topbar .wide { display: flex; justify-content: space-between; align-items: center; min-height: 52px; gap: 16px; }
+    .topbar a { text-decoration: none; color: var(--muted); }
+    .topbar a:hover { color: var(--ink); }
+    .topbar strong { color: var(--ink); font-weight: 600; }
+
+    /* Title block */
+    header.title { padding: 64px 0 8px; }
+    h1 { margin: 0 0 20px; font-weight: 500; font-size: clamp(2.4rem, 7vw, 4rem); line-height: 1.04; letter-spacing: -0.035em; }
+    h1 em { display: block; font-style: normal; color: var(--accent); }
+    .dek { margin: 0; color: var(--muted); font-size: 1.15rem; }
+
+    h2 { margin: 56px 0 12px; font-weight: 500; letter-spacing: -0.02em; font-size: 1.65rem; line-height: 1.25; }
+    h3 { margin: 0 0 8px; font-weight: 400; font-size: 1.25rem; line-height: 1.3; }
+    p { margin: 0 0 16px; }
+
+    .byline {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin: 32px auto 0;
+      padding: 16px 0;
+      border-block: 1px solid var(--faint);
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+    .byline strong { display: block; color: var(--ink); font: 400 1.6rem/1.2 var(--serif); }
+
+    /* Figures */
+    figure { margin: 32px auto; }
+    figcaption { margin-top: 8px; color: var(--muted); font-size: 0.8rem; line-height: 1.5; }
+    figcaption b { color: var(--ink); font-weight: 600; }
+    svg { display: block; width: 100%; height: auto; overflow: visible; }
+
+    .chart text { font-family: var(--sans); font-size: 11px; fill: var(--muted); }
+    .chart .axis-title { fill: var(--ink); font-size: 12px; }
+    .chart .grid { stroke: var(--faint); }
+    .chart .dot { fill: var(--dot); }
+    .chart .is-ink { fill: var(--ink); stroke: var(--ink); }
+    .chart .is-accent { fill: var(--accent); stroke: var(--accent); }
+    .chart .tag { fill: var(--ink); font-size: 12px; font-weight: 600; }
+    .chart .tag.is-accent { fill: var(--accent); stroke: none; }
+    .chart .gap { stroke: var(--accent); stroke-width: 1.5; fill: none; }
+    .chart .line { fill: none; stroke-width: 2; }
+    .chart .line.is-ink { stroke: var(--ink); fill: none; }
+    .chart .line.is-accent { stroke: var(--accent); fill: none; }
+    .ref { border-bottom: 2px solid var(--faint); cursor: default; }
+    .ref.is-accent { border-color: var(--accent); }
+    .ref:hover, .ref:focus-visible { background: var(--accent-soft); outline: none; }
+    .chart circle { transition: r 150ms ease-out; }
+    .chart circle.is-focus { r: 11px; }
+    .chart .cursor { stroke: var(--ink); stroke-dasharray: 2 4; }
+
+    /* Paired comparison */
+    .risk { margin: 24px 0 8px; }
+    .risk-scale { display: flex; justify-content: space-between; color: var(--muted); font-size: 0.72rem; }
+    .risk-row { display: grid; grid-template-columns: 9.5rem 1fr 4rem; align-items: center; gap: 12px; margin: 10px 0; font-size: 0.85rem; }
+    .risk-row small { display: block; color: var(--muted); font-size: 0.72rem; }
+    .risk-track { height: 10px; background: var(--panel); }
+    .risk-bar { display: block; height: 100%; background: var(--ink); }
+    .risk-row.alert .risk-bar { background: var(--accent); }
+    .risk-row.alert b { color: var(--accent); }
+    .risk-row b { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+    /* Explorer */
+    .explorer { margin-top: 32px; padding: 32px 0 40px; background: var(--panel); }
+    .explorer h2 { margin-top: 0; }
+
+    .controls { display: grid; grid-template-columns: 1fr; gap: 24px 40px; align-items: end; margin: 24px 0; font-size: 0.85rem; }
+    .ratio-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
+    output { font: 400 1.6rem var(--serif); color: var(--accent); }
+
+    input[type="range"] { width: 100%; height: 24px; margin: 0; appearance: none; background: transparent; cursor: pointer; }
+    input[type="range"]::-webkit-slider-runnable-track { height: 3px; background: linear-gradient(90deg, var(--accent) var(--ratio-fill, 60%), var(--faint) 0); }
+    input[type="range"]::-moz-range-track { height: 3px; background: var(--faint); }
+    input[type="range"]::-moz-range-progress { height: 3px; background: var(--accent); }
+    input[type="range"]::-webkit-slider-thumb { appearance: none; width: 18px; height: 18px; margin-top: -7.5px; border: 3px solid var(--paper); border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+    input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border: 3px solid var(--paper); border-radius: 50%; background: var(--accent); }
+
+    .ticks { display: flex; justify-content: space-between; }
+    .ticks button { min-width: 32px; min-height: 32px; padding: 0; border: 0; background: none; color: var(--muted); font-size: 0.75rem; cursor: pointer; }
+    .ticks button[aria-current="true"] { color: var(--ink); font-weight: 700; }
+
+    .segmented { display: inline-flex; margin-top: 6px; border: 1px solid var(--faint); border-radius: 0; padding: 3px; }
+    .segmented button { min-height: 32px; padding: 0 14px; border: 0; border-radius: 0; background: none; color: var(--muted); font-size: 0.8rem; cursor: pointer; }
+    .segmented button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+
+    .proof { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 32px; align-items: start; margin-top: 8px; }
+    .proof-values { display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; align-items: end; margin: 20px 0 12px; }
+    .proof-value span, .proof-change span { display: block; color: var(--muted); font-size: 0.72rem; }
+    .proof-value strong { display: block; font: 400 2.3rem/1.1 var(--serif); font-variant-numeric: tabular-nums; }
+    .proof-value.is-calibrated strong { color: var(--accent); }
+    .proof-value small { color: var(--muted); font-size: 0.75rem; }
+    .proof-change { padding-bottom: 22px; text-align: center; }
+    .proof-change strong { font: 600 0.85rem var(--sans); color: var(--accent); }
+
+    details { margin-top: 8px; font-size: 0.95rem; }
+    summary { cursor: pointer; font-family: var(--sans); font-size: 0.8rem; color: var(--muted); }
+    details p { margin-top: 8px; }
+
+    .decision-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 32px; margin-top: 32px; }
+    .ranking { display: grid; gap: 2px; }
+    .table-wrap { overflow-x: auto; margin: 24px 0 12px; }
+    .cap-table { width: 100%; border-collapse: collapse; font: 0.85rem var(--sans); font-variant-numeric: tabular-nums; }
+    .cap-table th, .cap-table td { padding: 9px 8px; border-bottom: 1px solid var(--faint); text-align: right; white-space: nowrap; }
+    .cap-table th:first-child { text-align: left; font-weight: 400; }
+    .cap-table thead th { color: var(--muted); font-weight: 500; border-bottom-color: var(--ink); }
+    .cap-table .is-accent { color: var(--accent); font-weight: 600; }
+    .ranking-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 16px; margin-bottom: 12px; }
+    .ranking-head .label { margin: 0; }
+    .chart text.is-ink, .chart text.is-accent { stroke: none; }
+    .ranking-row { display: grid; grid-template-columns: 1.4rem 9.5rem 1fr 3.4rem; gap: 10px; align-items: center; min-height: 36px; padding: 0 8px; border: 0; background: none; text-align: left; font-size: 0.82rem; cursor: pointer; }
+    .ranking-row:hover { background: var(--accent-soft); }
+    .ranking-row[aria-pressed="true"] { background: var(--paper); box-shadow: inset 2px 0 var(--accent); }
+    .rank { color: var(--muted); font-variant-numeric: tabular-nums; }
+    .penalty-track { height: 6px; }
+    .penalty-bar { display: block; height: 100%; background: var(--dot); }
+    .ranking-row[aria-pressed="true"] .penalty-bar { background: var(--accent); }
+    .penalty-value { text-align: right; font-variant-numeric: tabular-nums; }
+
+    .model-detail { padding: 20px; background: var(--paper); font-size: 0.8rem; }
+    .model-detail h3 { margin: 4px 0 16px; font-family: var(--serif); }
+    .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .detail-grid strong { display: block; font: 400 1.5rem var(--serif); font-variant-numeric: tabular-nums; }
+    .detail-grid span { color: var(--muted); }
+    .detail-note { margin: 16px 0 0; color: var(--muted); }
+
+    .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-top: 40px; margin-bottom: 0; padding: 0; list-style: none; font: 0.85rem/1.5 var(--sans); color: var(--muted); }
+    .steps li { padding-top: 12px; border-top: 2px solid var(--ink); }
+    .steps .label { display: block; margin-bottom: 4px; color: var(--ink); }
+    .repair { margin-top: 20px; font-size: 0.8rem; color: var(--muted); }
+    .takeaways { padding-left: 1.2em; }
+    .takeaways li { margin-bottom: 16px; padding-left: 4px; }
+    .takeaways li::marker { color: var(--accent); font-weight: 600; }
+    .takeaways b { font-weight: 600; }
+    .scope { margin-block: 48px 72px; padding-top: 16px; border-top: 1px solid var(--faint); font-size: 0.95rem; color: var(--muted); }
+
+    @media (max-width: 760px) {
+      body { font-size: 17px; }
+      header.title { padding-top: 40px; }
+      .steps, .byline, .controls, .proof, .decision-grid { grid-template-columns: 1fr; }
+      .byline { gap: 12px; }
+      .risk-row { grid-template-columns: 7rem 1fr 3.4rem; }
+      .ranking-row { grid-template-columns: 1.2rem 1fr 4rem 3rem; }
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+      .js [data-reveal] { opacity: 0; transform: translateY(14px); transition: opacity 600ms ease-out, transform 600ms ease-out; }
+      .js [data-reveal].is-in { opacity: 1; transform: none; }
+      .steps li:nth-child(2), .byline div:nth-child(2), .takeaways li:nth-child(2) { transition-delay: 120ms; }
+      .steps li:nth-child(3), .byline div:nth-child(3), .takeaways li:nth-child(3) { transition-delay: 240ms; }
+      .js .risk:not(.is-in) .risk-bar { width: 0 !important; }
+      .risk-bar { transition: width 1000ms cubic-bezier(.2,.7,.2,1) !important; }
+      .risk-row.alert .risk-bar { transition-delay: 250ms !important; }
+      .js #ratio-plot .line { stroke-dasharray: 1200; stroke-dashoffset: 1200; transition: stroke-dashoffset 2600ms ease-in-out; }
+      .js #ratio-plot.is-in .line { stroke-dashoffset: 0; }
+      .reveal circle { transform: scale(0.4); transform-box: fill-box; transform-origin: center; transition: transform 500ms cubic-bezier(.3,1.5,.5,1) var(--delay, 0ms), opacity 300ms ease-out var(--delay, 0ms), r 150ms ease-out; }
+      .reveal.is-in circle { transform: none; }
+      .reveal circle, .reveal .tag, .reveal .gap { opacity: 0; }
+      .reveal .tag, .reveal .gap { transition: opacity 500ms ease-out; }
+      .reveal .gap { stroke-dasharray: 200; stroke-dashoffset: 200; transition: stroke-dashoffset 600ms ease-out 1300ms, opacity 0s 1300ms; }
+      .reveal .tag { transition-delay: 1000ms; }
+      .reveal .gap + .tag { transition-delay: 1800ms; }
+      .reveal.is-in circle, .reveal.is-in .tag, .reveal.is-in .gap { opacity: 1; stroke-dashoffset: 0; }
+      .risk-bar, .penalty-bar { transition: width 200ms ease-out; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to analysis</a>
+
+  <nav class="topbar" aria-label="Site">
+    <div class="wide">
+      <span><strong>Halifax 311</strong> · forecast to staffing</span>
+      <a href="https://github.com/Enayat-Hassani/halifax-311-forecasting-staffing">Methods and code on GitHub ↗</a>
+    </div>
+  </nav>
+
+  <main id="main">
+    <header class="title col">
+      <p class="label">52-week backtest · Erlang A · half-hourly</p>
+      <h1>Similar forecast error, <em>different staffing risk</em></h1>
+      <p class="dek">Does the most accurate forecast also give the best staffing? This page tests that question on public call data from Halifax 311, the city&rsquo;s contact centre. Nine forecast runs were compared over 52 weeks, by their error and by the staffing they lead to.</p>
+    </header>
+
+    <ol class="col steps" aria-label="How the study works">
+      <li data-reveal><span class="label">1 · Forecast</span>Each Monday, nine runs forecast calls for the week starting seven days later. Capacity forecasts extend 13 and 26 weeks ahead.</li>
+      <li data-reveal><span class="label">2 · Staff</span>For the one-week horizon, Erlang A turns calls into the agents needed in each half-hour. Capacity forecasts become FTE estimates.</li>
+      <li data-reveal><span class="label">3 · Score</span>We compare staffing error and cost. A short hour can cost more than a spare one.</li>
+    </ol>
+    <p class="col note repair" data-reveal>Before modelling, the published data was repaired: one year was largely counted twice (about 61% too high), and later timestamps were four hours off.</p>
+
+    <figure class="wide" id="evidence">
+      <svg id="accuracy-plot" class="chart" viewBox="0 0 640 400" role="img" aria-label="Scatter plot of WAPE against the share of understaffed intervals for nine forecasting runs. Prophet secondary and Chronos-2 have almost the same WAPE, but Chronos-2 is understaffed in 8.3 points more intervals."></svg>
+      <figcaption><b>Figure 1.</b> Each dot is one forecast run, staffed from its forecast as is. <span class="ref" tabindex="0" data-model="Prophet · secondary">Prophet (secondary)</span> and <span class="ref is-accent" tabindex="0" data-model="Chronos-2">Chronos-2</span> have almost the same error and the same weekly staffing error (70.2 agent-hours). But Chronos-2 forecasts 4.4% too low, so more half-hours are short.</figcaption>
+    </figure>
+
+    <div class="col">
+      <div class="byline" aria-label="Study summary">
+        <div data-reveal><strong data-count="0.98">0.98</strong>rank agreement between WAPE and staffing error when costs are equal</div>
+        <div data-reveal><strong data-count="8.3" data-suffix=" pp">8.3 pp</strong>more short half-hours for Chronos-2, at the same staffing error</div>
+        <div data-reveal><strong data-count="22" data-suffix="%">22%</strong>lower best cost at 4× after adjusting the forecast (153.4 → 119.0)</div>
+      </div>
+
+      <h2>Accuracy ranks the models. Bias sets the risk.</h2>
+      <p>WAPE and staffing error rank the nine runs almost the same way. But two runs with the same error can miss in different directions. A forecast that runs low leaves more half-hours short, and being short usually costs more than having a spare agent.</p>
+
+      <div class="risk" data-reveal aria-label="Share of understaffed intervals at equal staffing error">
+        <div class="risk-scale" aria-hidden="true"><span>0%</span><span>understaffed intervals</span><span>50%</span></div>
+        <div class="risk-row">
+          <span>Prophet · secondary<small>bias +0.8% · 80.2% SL</small></span>
+          <span class="risk-track"><span class="risk-bar" style="width:57.6%"></span></span>
+          <b data-count="28.8" data-suffix="%">28.8%</b>
+        </div>
+        <div class="risk-row alert">
+          <span>Chronos-2<small>bias −4.4% · 78.4% SL</small></span>
+          <span class="risk-track"><span class="risk-bar" style="width:74.2%"></span></span>
+          <b data-count="37.1" data-suffix="%">37.1%</b>
+        </div>
+      </div>
+    </div>
+
+    <section class="explorer" id="decision" aria-labelledby="explorer-title">
+      <div class="wide">
+        <div class="col" style="width:auto;max-width:var(--text);margin:0">
+          <p class="label">Interactive</p>
+          <h2 id="explorer-title">Choose how much a short hour costs</h2>
+          <p>At 4×, one short agent-hour costs as much as four spare ones. Move the slider to compare the forecast as is with the same forecast adjusted for that cost. Results cover 52 test weeks.</p>
+        </div>
+
+        <div class="controls">
+          <div>
+            <div class="ratio-head">
+              <label class="label" for="ratio">Understaffing weight</label>
+              <output id="ratio-value" for="ratio">4×</output>
+            </div>
+            <input id="ratio" type="range" min="0" max="5" value="3" step="1" aria-valuetext="4 times">
+            <div class="ticks" aria-label="Choose an understaffing weight">
+              <button type="button" data-ratio-index="0">0.5×</button>
+              <button type="button" data-ratio-index="1">1×</button>
+              <button type="button" data-ratio-index="2">2×</button>
+              <button type="button" data-ratio-index="3" aria-current="true">4×</button>
+              <button type="button" data-ratio-index="4">8×</button>
+              <button type="button" data-ratio-index="5">16×</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="proof">
+          <div aria-live="polite">
+            <h3 id="proof-title">At 4×, the adjustment cuts staffing error by 25%.</h3>
+            <p class="note" id="proof-note" style="font-size:0.8rem;color:var(--muted)">Both use XGBoost · secondary, the most accurate run. Only the adjustment changes.</p>
+            <div class="proof-values">
+              <div class="proof-value">
+                <span>Point forecast</span>
+                <strong id="proof-point">157.7</strong>
+                <small id="proof-point-risk">29.5% understaffed</small>
+              </div>
+              <div class="proof-change"><strong id="proof-change">25% lower</strong><span>error / week</span></div>
+              <div class="proof-value is-calibrated">
+                <span>Adjusted</span>
+                <strong id="proof-uplift">119.0</strong>
+                <small id="proof-uplift-risk">11.5% understaffed</small>
+              </div>
+            </div>
+            <details>
+              <summary>How the adjustment works</summary>
+              <p>For each model, actual calls are divided by forecast calls in every open half-hour of 26 training weeks. This shows how the model usually misses. The cost ratio r sets how cautious to be: the target is the quantile q = r / (1 + r), so 4× gives q = 0.80. The forecast is multiplied by that quantile, and staffing is scored on the test year.</p>
+            </details>
+          </div>
+          <figure style="margin:0">
+            <svg id="ratio-plot" class="chart" viewBox="0 0 520 300" role="img" aria-label="Weighted staffing error per week against the understaffing weight, for the point forecast and the calibrated forecast."></svg>
+            <figcaption><b>Figure 2.</b> Weekly cost for the most accurate run, as is and adjusted. The gap grows as a short hour costs more.</figcaption>
+          </figure>
+        </div>
+
+        <div class="decision-grid">
+          <div>
+            <div class="ranking-head">
+              <p class="label" id="method-label">All runs, ranked by weighted error / week, staffed from</p>
+              <div class="segmented" role="group" aria-labelledby="method-label">
+                <button type="button" data-method="point" aria-pressed="false">Point forecast</button>
+                <button type="button" data-method="uplift" aria-pressed="true">Adjusted</button>
+              </div>
+            </div>
+            <div class="ranking" id="ranking"></div>
+          </div>
+          <aside class="model-detail" aria-live="polite">
+            <span class="label">Selected run</span>
+            <h3 id="detail-name">XGBoost · secondary</h3>
+            <div class="detail-grid">
+              <div><strong id="detail-penalty">119.0</strong><span>error / week</span></div>
+              <div><strong id="detail-under">11.5%</strong><span>understaffed</span></div>
+              <div><strong id="detail-sl">87.9%</strong><span>modelled SL</span></div>
+              <div><strong id="detail-multiplier">1.18×</strong><span>forecast factor</span></div>
+            </div>
+            <p class="detail-note" id="detail-note">19.3% WAPE · 0.0% bias.</p>
+          </aside>
+        </div>
+      </div>
+    </section>
+
+    <section class="col" aria-labelledby="capacity-title">
+      <p class="label">Capacity horizon</p>
+      <h2 id="capacity-title">Months ahead, the model matters less than the buffer</h2>
+      <p>Capacity plans are set 13 to 26 weeks out, in weekly totals rather than half-hours. At that level, weekly error stays near 9–12% for every model, even 26 weeks ahead. In FTE at 4×, the same adjustment lowers every model&rsquo;s weekly cost, and the gap between models falls to under half an FTE.</p>
+      <div class="table-wrap" data-reveal>
+        <p class="label" id="cap-caption">Weekly WAPE by lead · FTE cost at 13 w, 4×</p>
+        <table class="cap-table" aria-labelledby="cap-caption">
+          <thead><tr><th scope="col">Model</th><th scope="col">1 w</th><th scope="col">13 w</th><th scope="col">26 w</th><th scope="col">Point</th><th scope="col">Uplift</th></tr></thead>
+          <tbody>
+          <tr><th scope="row">Seasonal Naive</th><td>11.9%</td><td>11.7%</td><td>11.7%</td><td>3.97</td><td class="is-accent">3.13</td></tr>
+          <tr><th scope="row">Prophet</th><td>8.5%</td><td>10.1%</td><td>9.8%</td><td>3.20</td><td class="is-accent">2.77</td></tr>
+          <tr><th scope="row">XGBoost</th><td>8.7%</td><td>10.1%</td><td>9.3%</td><td>3.77</td><td class="is-accent">2.79</td></tr>
+          <tr><th scope="row">Chronos-2</th><td>12.2%</td><td>11.6%</td><td>11.4%</td><td>3.96</td><td class="is-accent">3.23</td></tr>
+          <tr><th scope="row">Chronos-2 · cal.</th><td>12.6%</td><td>10.7%</td><td>11.0%</td><td>3.66</td><td class="is-accent">3.10</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note" style="font-size:0.8rem;color:var(--muted)">Secondary training window, 52 test weeks. 1-week Chronos-2 runs use the primary window. FTE assumes 237 s handle time, 85% occupancy, 32.5% shrinkage and 37.5 paid hours; it excludes interval safety staffing and is not a headcount plan.</p>
+    </section>
+    <section class="col" aria-labelledby="takeaways-title">
+      <h2 id="takeaways-title">What this means for planning</h2>
+      <ol class="takeaways">
+        <li data-reveal><b>Judge forecasts by staffing, not WAPE alone.</b> When costs are equal, the two agree (rank correlation 0.97–1.00). When a short hour costs more, the direction of the error changes the ranking: at 16×, Chronos-2 falls from third to eighth of nine.</li>
+        <li data-reveal><b>Check which way a model misses.</b> A forecast that runs 4.4% low reaches a modelled service level of only 78.4%, below the 80% target, with the same total error as a model that meets it.</li>
+        <li data-reveal><b>Adjust the forecast before switching models.</b> One cost-based adjustment cut the cost by 15–31% at 4×. For capacity plans 13 weeks out, runs differ by less than one FTE per week after it.</li>
+      </ol>
+    </section>
+
+    <aside class="col scope" aria-label="Scope and limitations">
+      <p><span class="label">Scope</span><br>Scheduling results estimate net staffing for one queue and one test year. They do not model shrinkage, shifts or rosters. Capacity FTE uses assumed occupancy and shrinkage, but excludes interval safety staffing and roster constraints. Neither analysis reflects HRM staffing or actual costs. <a href="https://github.com/Enayat-Hassani/halifax-311-forecasting-staffing">Full assumptions ↗</a></p>
+    </aside>
+  </main>
+
+  <script>
+    const ratios = [0.5, 1, 2, 4, 8, 16];
+    const models = [
+      { name: "Seasonal Naive", wape: 26.1, bias: 0.5, error: 85.5, under: 34.8, sl: 79.5, point: [64.5, 85.5, 127.4, 211.2, 378.9, 714.2], uplift: [[55.4, 49.7, 72.9, 0.87], [85.5, 34.8, 79.5, 1], [126.8, 21.6, 85.4, 1.16], [179, 12.5, 90.2, 1.34], [244.8, 6.7, 93.9, 1.55], [330.4, 4, 96.3, 1.8]] },
+      { name: "MSTL · primary", wape: 21.8, bias: 0, error: 71.4, under: 32.3, sl: 80.2, point: [53.5, 71.4, 107.2, 178.9, 322.2, 608.8], uplift: [[47.7, 45.6, 75, 0.9], [71.3, 31.8, 80.4, 1], [102.2, 19.7, 85.2, 1.12], [141.2, 11.8, 89.4, 1.25], [185.9, 6.6, 92.5, 1.39], [239.4, 3.8, 94.9, 1.54]] },
+      { name: "MSTL · secondary", wape: 21.8, bias: -0.1, error: 71.7, under: 32.6, sl: 80.2, point: [53.6, 71.7, 107.8, 180, 324.4, 613.2], uplift: [[47.6, 46.2, 74.8, 0.89], [71.7, 32.2, 80.3, 1], [102.1, 19.9, 85.2, 1.12], [141.6, 12, 89.3, 1.25], [187, 6.8, 92.5, 1.39], [240.3, 3.9, 94.9, 1.54]] },
+      { name: "Prophet · primary", wape: 23.5, bias: -1, error: 77.5, under: 32.9, sl: 79.1, point: [57.5, 77.5, 117.4, 197.4, 357.2, 677], uplift: [[50.2, 47.4, 73.1, 0.88], [77.4, 34.5, 78.5, 0.99], [111.1, 22.8, 83.7, 1.11], [155, 14.4, 87.8, 1.24], [208.4, 8.3, 91.4, 1.39], [276.4, 5.1, 94.2, 1.56]] },
+      { name: "Prophet · secondary", wape: 21.4, bias: 0.8, error: 70.2, under: 28.8, sl: 80.2, point: [53.7, 70.2, 103.2, 169.2, 301.2, 565.2], uplift: [[47.9, 42.7, 74.7, 0.89], [70.2, 28.8, 80.2, 1], [98.8, 18.2, 84.9, 1.11], [130.1, 10.2, 88.8, 1.23], [169.2, 5.7, 91.9, 1.35], [214.6, 3.1, 94.3, 1.47]] },
+      { name: "XGBoost · primary", wape: 19.8, bias: 1.5, error: 64.5, under: 27.9, sl: 81.5, point: [49.6, 64.5, 94.1, 153.4, 272, 509.3], uplift: [[43.1, 43.1, 75.7, 0.88], [64.1, 29.7, 80.8, 0.99], [90.9, 18.6, 85.2, 1.09], [124.2, 10.5, 89.1, 1.21], [163.3, 5, 92.5, 1.34], [205.4, 2.7, 94.6, 1.46]] },
+      { name: "XGBoost · secondary", wape: 19.3, bias: 0, error: 62.6, under: 29.5, sl: 80.6, point: [46.8, 62.6, 94.3, 157.7, 284.5, 538], uplift: [[42, 43.2, 75.2, 0.89], [62.5, 31.2, 80, 0.99], [89, 19.8, 84.3, 1.08], [119, 11.5, 87.9, 1.18], [153, 6.2, 91.1, 1.29], [192.6, 3.5, 93.2, 1.39]] },
+      { name: "Chronos-2", wape: 21.5, bias: -4.4, error: 70.2, under: 37.1, sl: 78.4, point: [49.2, 70.2, 112, 195.8, 363.2, 698.1], uplift: [[47, 47.6, 74.3, 0.92], [69.7, 33.8, 79.6, 1.03], [99.8, 22.4, 84.2, 1.14], [136, 13.7, 88.2, 1.27], [177.1, 7.5, 91.8, 1.41], [222.1, 4.2, 94.1, 1.54]] },
+      { name: "Chronos-2 · calendar", wape: 21.7, bias: -2.5, error: 70.4, under: 35.0, sl: 79.2, point: [50.8, 70.4, 109.7, 188.2, 345.2, 659.3], uplift: [[47.6, 45.6, 75.1, 0.92], [70.5, 33.2, 80, 1.02], [101.1, 22.3, 84.5, 1.13], [138.4, 13.8, 88.5, 1.25], [179.8, 7.5, 91.9, 1.39], [226.7, 4.2, 94.2, 1.53]] }
+    ];
+
+    const ratioInput = document.querySelector("#ratio");
+    const ratioValue = document.querySelector("#ratio-value");
+    const ratioButtons = [...document.querySelectorAll("[data-ratio-index]")];
+    const methodButtons = [...document.querySelectorAll("[data-method]")];
+    const ranking = document.querySelector("#ranking");
+    const accuracyModel = models.reduce((best, model) => model.wape < best.wape ? model : best);
+    const ns = "http://www.w3.org/2000/svg";
+    let method = "uplift";
+    let selected = "XGBoost · secondary";
+
+    function svgAdder(svg) {
+      return (name, attrs, text) => {
+        const element = document.createElementNS(ns, name);
+        Object.entries(attrs).forEach(([key, value]) => element.setAttribute(key, value));
+        if (text !== undefined) element.textContent = text;
+        svg.appendChild(element);
+        return element;
+      };
+    }
+
+    function getMetrics(model, index) {
+      if (method === "point") return { penalty: model.point[index], under: model.under, sl: model.sl, multiplier: 1 };
+      const [penalty, under, sl, multiplier] = model.uplift[index];
+      return { penalty, under, sl, multiplier };
+    }
+
+    function updateDetail(item) {
+      document.querySelector("#detail-name").textContent = item.model.name;
+      document.querySelector("#detail-penalty").textContent = item.penalty.toFixed(1);
+      document.querySelector("#detail-under").textContent = `${item.under.toFixed(1)}%`;
+      document.querySelector("#detail-sl").textContent = `${item.sl.toFixed(1)}%`;
+      document.querySelector("#detail-multiplier").textContent = `${item.multiplier.toFixed(2)}×`;
+      const bias = item.model.bias > 0 ? `+${item.model.bias.toFixed(1)}%` : `${item.model.bias.toFixed(1)}%`;
+      document.querySelector("#detail-note").textContent = `${item.model.wape.toFixed(1)}% WAPE · ${bias} bias. Weighted staffing error combines understaffed and overstaffed agent-hours.`;
+    }
+
+    function drawRatioPlot(index) {
+      const svg = document.querySelector("#ratio-plot");
+      svg.replaceChildren();
+      const add = svgAdder(svg);
+      const w = 520, h = 300, m = { top: 16, right: 92, bottom: 44, left: 48 };
+      const x = i => m.left + i / (ratios.length - 1) * (w - m.left - m.right);
+      const y = v => h - m.bottom - v / 600 * (h - m.top - m.bottom);
+      [0, 200, 400, 600].forEach(t => {
+        add("line", { class: "grid", x1: m.left, x2: w - m.right, y1: y(t), y2: y(t) });
+        add("text", { x: m.left - 8, y: y(t) + 4, "text-anchor": "end" }, t);
+      });
+      ratios.forEach((r, i) => add("text", { x: x(i), y: h - m.bottom + 18, "text-anchor": "middle" }, `${r}×`));
+      add("text", { class: "axis-title", x: (m.left + w - m.right) / 2, y: h - 4, "text-anchor": "middle" }, "Understaffing weight");
+      add("line", { class: "cursor", x1: x(index), x2: x(index), y1: m.top, y2: h - m.bottom });
+      const point = accuracyModel.point;
+      const uplift = accuracyModel.uplift.map(v => v[0]);
+      [[point, "is-ink", "Point forecast"], [uplift, "is-accent", "Adjusted"]].forEach(([values, cls, name]) => {
+        add("path", { class: `line ${cls}`, d: values.map((v, i) => `${i ? "L" : "M"}${x(i)},${y(v)}`).join("") });
+        add("circle", { class: cls, cx: x(index), cy: y(values[index]), r: 5 });
+        add("text", { class: `tag ${cls}`, x: x(ratios.length - 1) + 8, y: y(values.at(-1)) + 4 }, name);
+      });
+    }
+
+    function updateExplorer() {
+      const index = Number(ratioInput.value);
+      const ratio = ratios[index];
+      ratioValue.value = `${ratio}×`;
+      ratioInput.setAttribute("aria-valuetext", `${ratio} times the overstaffing weight`);
+      ratioInput.style.setProperty("--ratio-fill", `${index / (ratios.length - 1) * 100}%`);
+      ratioButtons.forEach(button => button.setAttribute("aria-current", String(Number(button.dataset.ratioIndex) === index)));
+
+      const rows = models.map(model => ({ model, ...getMetrics(model, index) })).sort((a, b) => a.penalty - b.penalty);
+      const max = Math.max(...rows.map(row => row.penalty));
+      const pointError = accuracyModel.point[index];
+      const calibrated = accuracyModel.uplift[index];
+      const reduction = (1 - calibrated[0] / pointError) * 100;
+      document.querySelector("#proof-title").textContent = ratio > 1
+        ? `At ${ratio}×, the adjustment cuts staffing error by ${reduction.toFixed(0)}%.`
+        : ratio === 1
+          ? "With equal costs, the adjustment makes little difference."
+          : "When spare staff costs more, the adjustment lowers the forecast.";
+      document.querySelector("#proof-note").textContent = `Both use ${accuracyModel.name}, the most accurate run. Only the adjustment changes.`;
+      document.querySelector("#proof-point").textContent = pointError.toFixed(1);
+      document.querySelector("#proof-point-risk").textContent = `${accuracyModel.under.toFixed(1)}% understaffed`;
+      document.querySelector("#proof-change").textContent = reduction >= 1 ? `${reduction.toFixed(0)}% lower` : "about the same";
+      document.querySelector("#proof-uplift").textContent = calibrated[0].toFixed(1);
+      document.querySelector("#proof-uplift-risk").textContent = `${calibrated[1].toFixed(1)}% understaffed`;
+      drawRatioPlot(index);
+
+      ranking.replaceChildren(...rows.map((item, rank) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "ranking-row";
+        button.setAttribute("aria-pressed", String(item.model.name === selected));
+        button.setAttribute("aria-label", `${item.model.name}, rank ${rank + 1}, weighted staffing error ${item.penalty.toFixed(1)} per week`);
+        button.innerHTML = `
+          <span class="rank">${rank + 1}</span>
+          <span class="model-name">${item.model.name}</span>
+          <span class="penalty-track" aria-hidden="true"><span class="penalty-bar" style="width:${(item.penalty / max * 100).toFixed(1)}%"></span></span>
+          <span class="penalty-value">${item.penalty.toFixed(1)}</span>`;
+        button.addEventListener("click", () => {
+          selected = item.model.name;
+          [...ranking.children].forEach(row => row.setAttribute("aria-pressed", String(row === button)));
+          updateDetail(item);
+        });
+        return button;
+      }));
+
+      updateDetail(rows.find(item => item.model.name === selected) || rows[0]);
+    }
+
+    ratioInput.addEventListener("input", updateExplorer);
+    ratioButtons.forEach(button => button.addEventListener("click", () => {
+      ratioInput.value = button.dataset.ratioIndex;
+      updateExplorer();
+    }));
+    methodButtons.forEach(button => button.addEventListener("click", () => {
+      method = button.dataset.method;
+      methodButtons.forEach(item => item.setAttribute("aria-pressed", String(item === button)));
+      updateExplorer();
+    }));
+
+    function drawAccuracyPlot() {
+      const add = svgAdder(document.querySelector("#accuracy-plot"));
+      const w = 640, h = 400, m = { top: 24, right: 24, bottom: 52, left: 52 };
+      const xMin = 18, xMax = 27, yMin = 25, yMax = 40;
+      const x = v => m.left + (v - xMin) / (xMax - xMin) * (w - m.left - m.right);
+      const y = v => h - m.bottom - (v - yMin) / (yMax - yMin) * (h - m.top - m.bottom);
+
+      [18, 21, 24, 27].forEach(t => {
+        add("line", { class: "grid", x1: x(t), x2: x(t), y1: m.top, y2: h - m.bottom });
+        add("text", { x: x(t), y: h - m.bottom + 20, "text-anchor": "middle" }, `${t}%`);
+      });
+      [25, 30, 35, 40].forEach(t => {
+        add("line", { class: "grid", x1: m.left, x2: w - m.right, y1: y(t), y2: y(t) });
+        add("text", { x: m.left - 10, y: y(t) + 4, "text-anchor": "end" }, `${t}%`);
+      });
+      add("text", { class: "axis-title", x: (m.left + w - m.right) / 2, y: h - 8, "text-anchor": "middle" }, "WAPE (lower is more accurate) →");
+      add("text", { class: "axis-title", x: m.left - 44, y: m.top - 6 }, "Intervals understaffed");
+
+      const prophet = models.find(item => item.name === "Prophet · secondary");
+      const chronos = models.find(item => item.name === "Chronos-2");
+      add("path", { class: "gap", d: `M${x(chronos.wape) + 14},${y(prophet.under)} h6 V${y(chronos.under)} h-6` });
+      add("text", { class: "tag is-accent", x: x(chronos.wape) + 28, y: (y(prophet.under) + y(chronos.under)) / 2 + 4 }, "+8.3 pp");
+
+      models.forEach(model => {
+        const cls = model === chronos ? "is-accent" : model === prophet ? "is-ink" : "dot";
+        const dot = add("circle", { class: cls, "data-model": model.name, cx: x(model.wape), cy: y(model.under), r: cls === "dot" ? 5 : 7 });
+        dot.style.setProperty("--delay", cls === "dot" ? `${models.indexOf(model) * 70}ms` : "750ms");
+        const title = document.createElementNS(ns, "title");
+        title.textContent = `${model.name}: ${model.wape}% WAPE, ${model.under}% of intervals understaffed`;
+        dot.appendChild(title);
+      });
+      add("text", { class: "tag", x: x(prophet.wape) - 12, y: y(prophet.under) + 4, "text-anchor": "end" }, "Prophet · secondary");
+      add("text", { class: "tag is-accent", x: x(chronos.wape) - 12, y: y(chronos.under) + 4, "text-anchor": "end" }, "Chronos-2");
+      [["XGBoost · secondary", 0, -12, "middle"], ["Seasonal Naive", -10, -10, "end"]].forEach(([name, dx, dy, anchor]) => {
+        const model = models.find(item => item.name === name);
+        add("text", { x: x(model.wape) + dx, y: y(model.under) + dy, "text-anchor": anchor }, name);
+      });
+    }
+
+    drawAccuracyPlot();
+    const plot = document.querySelector("#accuracy-plot");
+    const ratioPlot = document.querySelector("#ratio-plot");
+    const calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if ("IntersectionObserver" in window && !calm) {
+      document.documentElement.classList.add("js");
+      plot.classList.add("reveal");
+      const countUp = el => {
+        const end = Number(el.dataset.count), digits = el.dataset.count.split(".")[1]?.length || 0, suffix = el.dataset.suffix || "";
+        const start = performance.now();
+        const tick = now => {
+          const t = Math.min(1, (now - start) / 1000);
+          el.textContent = (end * (1 - (1 - t) ** 3)).toFixed(digits) + suffix;
+          if (t < 1) requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      };
+      // Play when an element is a quarter up the screen; reset only once it has fully left, so it replays without flicker.
+      const enter = new IntersectionObserver(entries => entries.forEach(entry => {
+        if (!entry.isIntersecting || entry.target.classList.contains("is-in")) return;
+        entry.target.classList.add("is-in");
+        entry.target.querySelectorAll("[data-count]").forEach(countUp);
+      }), { threshold: 0.2, rootMargin: "0px 0px -25% 0px" });
+      const leave = new IntersectionObserver(entries => entries.forEach(entry => {
+        if (!entry.isIntersecting) entry.target.classList.remove("is-in");
+      }));
+      [plot, ratioPlot, ...document.querySelectorAll("[data-reveal]")].forEach(el => { enter.observe(el); leave.observe(el); });
+    }
+    document.querySelectorAll(".ref").forEach(ref => {
+      const dot = document.querySelector(`#accuracy-plot circle[data-model="${ref.dataset.model}"]`);
+      ["mouseenter", "focus"].forEach(e => ref.addEventListener(e, () => dot.classList.add("is-focus")));
+      ["mouseleave", "blur"].forEach(e => ref.addEventListener(e, () => dot.classList.remove("is-focus")));
+    });
+    updateExplorer();
+  </script>
+</body>
+</html>
