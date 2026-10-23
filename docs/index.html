@@ -17,14 +17,15 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
     :root {
-      --paper: #ffffff;
-      --panel: #f2f2f2;
-      --ink: rgba(0, 0, 0, 0.85);
-      --muted: rgba(0, 0, 0, 0.6);
-      --faint: rgba(0, 0, 0, 0.14);
-      --dot: #9a9a9a;
-      --accent: #2b3cff;
-      --accent-soft: rgba(43, 60, 255, 0.10);
+      color-scheme: dark;
+      --paper: #0c0c0c;
+      --panel: #171717;
+      --ink: rgba(255, 255, 255, 0.88);
+      --muted: rgba(255, 255, 255, 0.6);
+      --faint: rgba(255, 255, 255, 0.16);
+      --dot: #666;
+      --accent: #ff4d3d;
+      --accent-soft: rgba(255, 77, 61, 0.16);
       --serif: "Inter Tight", -apple-system, sans-serif;
       --mono: "JetBrains Mono", ui-monospace, monospace;
       --sans: "Inter Tight", -apple-system, BlinkMacSystemFont, sans-serif;
@@ -32,18 +33,6 @@
       --wide: 960px;
     }
 
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --paper: #0c0c0c;
-        --panel: #171717;
-        --ink: rgba(255, 255, 255, 0.88);
-        --muted: rgba(255, 255, 255, 0.6);
-        --faint: rgba(255, 255, 255, 0.16);
-        --dot: #666;
-        --accent: #8c97ff;
-        --accent-soft: rgba(140, 151, 255, 0.16);
-      }
-    }
 
     * { box-sizing: border-box; }
 
@@ -305,6 +294,12 @@
           <b data-count="37.1" data-suffix="%">37.1%</b>
         </div>
       </div>
+
+      <p>The ranking depends on what a short hour costs. When a spare agent costs more, the low forecast from Chronos-2 ranks second of nine. From 8× upward, it ranks eighth. Prophet (secondary) moves the other way, from seventh to third.</p>
+      <figure id="rank-figure">
+        <svg id="rank-plot" class="chart" viewBox="0 0 640 380" role="img" aria-label="Rank of each forecast run by weighted staffing error as the understaffing weight rises from 0.5 to 16. Chronos-2 ranks second at 0.5×, tied third at 1× and eighth from 8×. Prophet secondary rises from seventh to third."></svg>
+        <figcaption><b>Figure 2.</b> Rank by weekly staffing error, staffed from each forecast as is. 1 is the lowest cost. Ties share a rank.</figcaption>
+      </figure>
     </div>
 
     <section class="explorer" id="decision" aria-labelledby="explorer-title">
@@ -357,7 +352,7 @@
           </div>
           <figure style="margin:0">
             <svg id="ratio-plot" class="chart" viewBox="0 0 520 300" role="img" aria-label="Weighted staffing error per week against the understaffing weight, for the point forecast and the calibrated forecast."></svg>
-            <figcaption><b>Figure 2.</b> Weekly cost for the most accurate run, as is and adjusted. The gap grows as a short hour costs more.</figcaption>
+            <figcaption><b>Figure 3.</b> Weekly cost for the most accurate run, as is and adjusted. The gap grows as a short hour costs more.</figcaption>
           </figure>
         </div>
 
@@ -590,6 +585,30 @@
         add("text", { x: x(model.wape) + dx, y: y(model.under) + dy, "text-anchor": anchor }, name);
       });
     }
+
+    function drawRankPlot() {
+      const add = svgAdder(document.querySelector("#rank-plot"));
+      const w = 640, h = 380, m = { top: 28, right: 170, bottom: 44, left: 36 };
+      const x = i => m.left + i / (ratios.length - 1) * (w - m.left - m.right);
+      const y = r => m.top + (r - 1) / 8 * (h - m.top - m.bottom);
+      const rank = j => models.map(item => 1 + models.filter(other => other.point[j] < item.point[j]).length);
+      const ranks = ratios.map((_, j) => rank(j));
+      ratios.forEach((r, i) => {
+        add("line", { class: "grid", x1: x(i), x2: x(i), y1: m.top - 10, y2: h - m.bottom + 6 });
+        add("text", { x: x(i), y: h - m.bottom + 26, "text-anchor": "middle" }, `${r}×`);
+      });
+      add("text", { class: "axis-title", x: (m.left + w - m.right) / 2, y: h - 2, "text-anchor": "middle" }, "Cost of a short hour vs a spare one →");
+      for (let r = 1; r <= 9; r++) add("text", { x: m.left - 14, y: y(r) + 4, "text-anchor": "end" }, r);
+      const style = name => name === "Chronos-2" ? "is-accent" : name === "Prophet · secondary" ? "is-ink" : "";
+      [...models].sort((a, b) => (style(a.name) ? 1 : 0) - (style(b.name) ? 1 : 0)).forEach(item => {
+        const k = models.indexOf(item), cls = style(item.name);
+        const d = ratios.map((_, i) => `${i ? "L" : "M"}${x(i)},${y(ranks[i][k])}`).join("");
+        add("path", { class: `line ${cls}`, d, style: cls ? "stroke-width:3" : "stroke:var(--dot);stroke-width:1.5" });
+        ratios.forEach((_, i) => add("circle", { class: cls || "dot", cx: x(i), cy: y(ranks[i][k]), r: cls ? 5 : 3.5 }));
+        add("text", { class: cls ? `tag ${cls}` : "", x: x(ratios.length - 1) + 14, y: y(ranks.at(-1)[k]) + 4 }, item.name);
+      });
+    }
+    drawRankPlot();
 
     drawAccuracyPlot();
     const plot = document.querySelector("#accuracy-plot");
